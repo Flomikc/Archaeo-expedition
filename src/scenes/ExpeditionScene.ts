@@ -22,6 +22,7 @@ import { LevelData, LevelGenerator, PathNode } from "../systems/LevelGenerator";
 import { SaveSystem } from "../systems/SaveSystem";
 import { ShopSystem } from "../systems/ShopSystem";
 import { HUD } from "../ui/HUD";
+import { rollArtifact } from "../data/ArtifactsData";
 
 export interface ExpeditionSceneOptions {
   engine: Engine;
@@ -377,20 +378,37 @@ export class ExpeditionScene {
     const playerPosition = this.player.camera.position;
     const nodes = this.level.nodes;
 
-    let bestNode: PathNode = nodes[Math.floor(nodes.length / 2)];
-    let bestDist = 0;
+    // Определяем текущий этаж игрока: floor = round(y / FLOOR_HEIGHT)
+    const playerFloor = Math.round(
+      (playerPosition.y - 1.7) / LevelGenerator.FLOOR_HEIGHT
+    );
+
+    // Ищем узлы подальше от игрока, желательно на том же этаже
+    let bestNode: PathNode | null = null;
+    let bestScore = -1;
+
     for (const node of nodes) {
       if (node.isStart || node.isGoal) continue;
+
       const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
       const dx = node.centerX - playerPosition.x;
       const dz = node.centerZ - playerPosition.z;
       const dy = floorY - playerPosition.y;
-      const dist = Math.sqrt(dx * dx + dz * dz + dy * dy);
-      if (dist > 15 && dist > bestDist) {
-        bestDist = dist;
+      const dist3D = Math.sqrt(dx * dx + dz * dz + dy * dy);
+
+      if (dist3D < 8) continue;
+
+      // Приоритет: тот же этаж → +100 к скору. Чем дальше — тем лучше.
+      const sameFloor = node.cell.floor === playerFloor;
+      const score = dist3D + (sameFloor ? 100 : 0);
+
+      if (score > bestScore) {
+        bestScore = score;
         bestNode = node;
       }
     }
+
+    if (!bestNode) bestNode = nodes[Math.floor(nodes.length / 2)];
 
     const floorY = bestNode.cell.floor * LevelGenerator.FLOOR_HEIGHT;
     const position = new Vector3(bestNode.centerX, floorY, bestNode.centerZ);
@@ -399,14 +417,18 @@ export class ExpeditionScene {
       new Anomaly({
         scene: this.scene,
         position,
-        pickPatrolPoint: () => this.pickPatrolPoint(),
+        floor: bestNode.cell.floor,
+        floorHeight: LevelGenerator.FLOOR_HEIGHT,
+        pickPatrolPoint: () => this.pickPatrolPoint(bestNode!.cell.floor),
       })
     );
   }
 
-  private pickPatrolPoint(): Vector3 {
-    const nodes = this.level.nodes;
-    const node = nodes[Math.floor(Math.random() * nodes.length)];
+  private pickPatrolPoint(floor: number): Vector3 {
+    // Патрулирует только в пределах своего этажа
+    const sameFloorNodes = this.level.nodes.filter((n) => n.cell.floor === floor);
+    const pool = sameFloorNodes.length > 0 ? sameFloorNodes : this.level.nodes;
+    const node = pool[Math.floor(Math.random() * pool.length)];
     const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
     return new Vector3(node.centerX, floorY, node.centerZ);
   }
@@ -473,7 +495,6 @@ export class ExpeditionScene {
     const spent = Math.max(0, MISSION_TIME - this.timeLeft);
 
     if (success) {
-      // Рассчитываем награду
       const baseReward = 100;
       const speedBonus = Math.max(0, Math.floor((MISSION_TIME / 2 - spent) / 5));
       const photosBonus = this.photos * 5;
@@ -481,9 +502,16 @@ export class ExpeditionScene {
 
       SaveSystem.addCoins(totalReward);
 
-      // Артефакт в инвентарь
-      const quality = Math.min(1, 0.6 + this.hp / 500);
-      SaveSystem.addArtifact("Скарабей", "egypt", quality);
+      // === Добыча: 1 находка с локации (common/uncommon) ===
+      //     + 1 извлечённая буром (rare/epic) ===
+      const siteDef = rollArtifact("egypt", "site");
+      const drillDef = rollArtifact("egypt", "drill");
+
+      const siteQuality = Math.min(1, 0.5 + this.hp / 200);
+      const drillQuality = Math.min(1, 0.5 + this.hp / 400);
+
+      SaveSystem.addArtifact(siteDef.id, "egypt", siteQuality, false);
+      SaveSystem.addArtifact(drillDef.id, "egypt", drillQuality, false);
 
       this.hud.showResult(
         "Вердикт миссии",
@@ -492,7 +520,8 @@ export class ExpeditionScene {
           `Время экспедиции: ${this.formatDuration(spent)}`,
           `Осталось снимков: ${this.photos}`,
           `Здоровье: ${Math.round(this.hp)}%`,
-          `Артефакт: Скарабей (${Math.round(quality * 100)}%)`,
+          `Найдено: ${siteDef.name}`,
+          `Извлечено буром: ${drillDef.name}`,
           `Награда: ${totalReward} монет`,
         ],
         [{ label: "Вернуться в фуру", primary: true, action: () => this.options.onReturnToHub() }]

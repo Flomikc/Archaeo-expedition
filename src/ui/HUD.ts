@@ -283,19 +283,34 @@ export class HUD {
       return;
     }
 
-    // Импортируем данные артефактов через динамический require не выйдет,
-    // поэтому просто дублируем ключевые поля (id и название уже в данных).
+    // Импортируем по месту, чтобы не ломать сборку циклическими зависимостями
+    // (в модульной системе Vite это нормально, но здесь проще через require-стиль
+    //  передачи объекта из ArtifactsData — оставим простой статический доступ).
+    const { getArtifact, RARITY_COLORS, RARITY_LABELS } =
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      (window as unknown as {
+        __artifactMeta: typeof import("../data/ArtifactsData");
+      }).__artifactMeta;
+
     for (let i = 0; i < artifacts.length; i++) {
       const art = artifacts[i];
+      const def = getArtifact(art.id);
+      const rarity = def?.rarity ?? "common";
+      const color = RARITY_COLORS[rarity];
+      const label = RARITY_LABELS[rarity];
+
       const row = document.createElement("div");
       row.className = "inv-item";
-      row.style.borderLeft = `4px solid ${art.restored ? "#c9a45a" : "#6b5a36"}`;
+      row.style.borderLeft = `4px solid ${color}`;
 
       const left = document.createElement("div");
       const t = document.createElement("b");
-      t.textContent = art.id;
+      t.textContent = def?.name ?? art.id;
+      t.style.color = color;
       const s = document.createElement("small");
-      s.textContent = `${art.location} · качество ${Math.round(art.quality * 100)}%${art.restored ? " · отреставрирован" : " · требует реставрации"}`;
+      s.textContent =
+        `${label} · качество ${Math.round(art.quality * 100)}%` +
+        (art.restored ? "" : " · требует реставрации");
       left.appendChild(t);
       left.appendChild(s);
 
@@ -320,13 +335,15 @@ export class HUD {
         sellBtn.onclick = () => this.artifactHandlers?.onSell(i);
         actions.appendChild(sellBtn);
 
-        const mergeBtn = document.createElement("button");
-        mergeBtn.textContent = "Слияние";
-        mergeBtn.style.minWidth = "0";
-        mergeBtn.style.padding = "5px 12px";
-        mergeBtn.style.fontSize = "12px";
-        mergeBtn.onclick = () => this.artifactHandlers?.onMerge([i]);
-        actions.appendChild(mergeBtn);
+        if (def?.evolvesInto) {
+          const mergeBtn = document.createElement("button");
+          mergeBtn.textContent = "Слияние";
+          mergeBtn.style.minWidth = "0";
+          mergeBtn.style.padding = "5px 12px";
+          mergeBtn.style.fontSize = "12px";
+          mergeBtn.onclick = () => this.artifactHandlers?.onMerge([i]);
+          actions.appendChild(mergeBtn);
+        }
       }
 
       row.appendChild(left);

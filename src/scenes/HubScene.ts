@@ -89,6 +89,16 @@ export class HubScene {
     lamp.range = 14;
 
     this.buildTruck();
+    const exitDoorTrigger = MeshBuilder.CreateBox(
+      "hubExitTrigger",
+      { width: 2, height: 2.4, depth: 0.6 },
+      this.scene
+    );
+    exitDoorTrigger.position.set(4.2, 1.2, 0);
+    exitDoorTrigger.visibility = 0;
+    exitDoorTrigger.isPickable = true;
+    exitDoorTrigger.checkCollisions = false;
+
     const laptopTrigger = this.buildFurniture();
 
     this.player = new Player({
@@ -116,7 +126,18 @@ export class HubScene {
       flightDuration: 0.75,
     });
 
+    // === Сначала создаём interaction, потом регистрируем всё ===
     this.interaction = new InteractionSystem(this.scene, this.player.camera);
+
+    // --- Дверь наружу ---
+    this.interaction.register({
+      mesh: exitDoorTrigger,
+      hint: "E — выйти из фуры",
+      range: 3,
+      enabled: () =>
+        !this.laptopOpen && !this.laptopSystem.isBusy && !this.workbench.isOpen(),
+      onInteract: () => this.options.onGoToDesert(),
+    });
 
     // --- Ноутбук ---
     this.interaction.register({
@@ -157,14 +178,12 @@ export class HubScene {
     // HUD-хуки
     // ================================================================
 
-    // Ноутбук
     this.hud.setLaptopHandlers({
       onClose: () => void this.closeLaptop(),
       onSelectLocation: (id) => this.onLocationSelected(id),
       onBuyItem: (id) => this.onBuyItem(id),
     });
 
-    // Артефакты (вкладка в ноутбуке)
     this.hud.setArtifactHandlers({
       onRestore: (index) => void this.restoreArtifact(index),
       onSell: (index) => this.sellArtifact(index),
@@ -224,6 +243,11 @@ export class HubScene {
     if (!this.laptopOpen) return;
     this.laptopOpen = false;
     this.hud.hideLaptop();
+
+    // ВАЖНО: захватываем pointer lock синхронно, пока мы всё ещё
+    // в контексте пользовательского клика — иначе браузер откажет.
+    this.engine.enterPointerlock();
+
     await this.laptopSystem.close();
   }
 
@@ -288,10 +312,12 @@ export class HubScene {
 
     this.player.setEnabled(false);
     this.hud.setHint(null);
+    this.engine.enterPointerlock();
 
     const result = await this.workbench.start(index);
 
     this.player.setEnabled(true);
+    this.engine.enterPointerlock();
 
     if (result.action === "restore" && typeof result.quality === "number") {
       SaveSystem.updateArtifact(index, {
@@ -307,11 +333,10 @@ export class HubScene {
 
   private async restoreArtifact(index: number): Promise<void> {
     const wasLaptopOpen = this.laptopOpen;
+    if (wasLaptopOpen) this.hud.hideLaptop();
 
-    // Прячем ноутбук, чтобы верстак перекрыл экран
-    if (wasLaptopOpen) {
-      this.hud.hideLaptop();
-    }
+    // Синхронный захват pointer lock до запуска мини-игры.
+    this.engine.enterPointerlock();
 
     const result = await this.workbench.start(index);
 
@@ -329,6 +354,10 @@ export class HubScene {
     if (wasLaptopOpen) {
       this.refreshLaptopUI();
       this.hud.showLaptop(SaveSystem.get().coins);
+    } else {
+      // Если мини-игра запускалась с верстака, вернуть управление игроку
+      this.player.setEnabled(true);
+      this.engine.enterPointerlock();
     }
   }
 
@@ -420,8 +449,9 @@ export class HubScene {
     fabric.diffuseColor = new Color3(0.25, 0.3, 0.35);
 
     const screenMat = new StandardMaterial("hubScreen", this.scene);
-    screenMat.diffuseColor = new Color3(0.05, 0.1, 0.15);
-    screenMat.emissiveColor = new Color3(0.15, 0.4, 0.65);
+    screenMat.diffuseColor = new Color3(0.02, 0.02, 0.03);
+    screenMat.emissiveColor = new Color3(0.01, 0.01, 0.015);
+    screenMat.specularColor = new Color3(0.05, 0.05, 0.05);
 
     const box = (
       name: string,

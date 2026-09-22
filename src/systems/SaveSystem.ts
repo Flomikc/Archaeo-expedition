@@ -20,7 +20,7 @@ const DEFAULT_LOCATIONS: string[] = ["egypt"];
 
 function emptySave(): SaveData {
   return {
-    coins: 0,
+    coins: 50,
     unlockedLocations: [...DEFAULT_LOCATIONS],
     hasCamera: false,
     levelSeed: null,

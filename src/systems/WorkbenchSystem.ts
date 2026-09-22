@@ -134,21 +134,120 @@ export class WorkbenchSystem {
   // ------------------------------------------------------------- rendering
 
   private buildTargetPath(): void {
-    // Генерируем замкнутый неправильный многоугольник (силуэт артефакта)
+    const shapes: Array<() => Array<{ x: number; y: number }>> = [
+      () => this.buildAmphora(),
+      () => this.buildStar(),
+      () => this.buildScarab(),
+      () => this.buildMask(),
+      () => this.buildRing(),
+    ];
+    const pick = shapes[Math.floor(Math.random() * shapes.length)];
+    this.targetPath = pick();
+  }
+
+  /** Амфора: овал с горлышком. */
+  private buildAmphora(): Array<{ x: number; y: number }> {
+    const cx = this.W / 2;
+    const cy = this.H / 2 + 10;
+    const pts: Array<{ x: number; y: number }> = [];
+
+    // Правая половина (сверху вниз)
+    for (let i = 0; i <= 12; i++) {
+      const t = i / 12;
+      const y = cy - 110 + t * 200;
+      const neckFactor = t < 0.2 ? 0.35 + t * 1.5 : 1;
+      const r = 75 * neckFactor * Math.sin(Math.PI * (0.15 + t * 0.8));
+      pts.push({ x: cx + Math.max(20, r), y });
+    }
+    // Левая половина (снизу вверх)
+    for (let i = 12; i >= 0; i--) {
+      const t = i / 12;
+      const y = cy - 110 + t * 200;
+      const neckFactor = t < 0.2 ? 0.35 + t * 1.5 : 1;
+      const r = 75 * neckFactor * Math.sin(Math.PI * (0.15 + t * 0.8));
+      pts.push({ x: cx - Math.max(20, r), y });
+    }
+    pts.push({ ...pts[0] });
+    return pts;
+  }
+
+  /** Пятиконечная звезда. */
+  private buildStar(): Array<{ x: number; y: number }> {
     const cx = this.W / 2;
     const cy = this.H / 2;
-    const points = 10;
-    this.targetPath = [];
-    for (let i = 0; i < points; i++) {
-      const angle = (i / points) * Math.PI * 2;
-      const radius = 90 + (Math.sin(i * 1.7) * 30) + (Math.cos(i * 2.3) * 20);
-      this.targetPath.push({
-        x: cx + Math.cos(angle) * radius,
-        y: cy + Math.sin(angle) * radius * 0.75,
+    const pts: Array<{ x: number; y: number }> = [];
+    const points = 5;
+    for (let i = 0; i < points * 2; i++) {
+      const r = i % 2 === 0 ? 120 : 55;
+      const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+      pts.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r });
+    }
+    pts.push({ ...pts[0] });
+    return pts;
+  }
+
+  /** Скарабей: овал с двумя «крыльями» по бокам. */
+  private buildScarab(): Array<{ x: number; y: number }> {
+    const cx = this.W / 2;
+    const cy = this.H / 2;
+    const pts: Array<{ x: number; y: number }> = [];
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * Math.PI * 2;
+      // Базовая окружность
+      const rx = 100;
+      const ry = 110;
+      // Боковые «крылья» — синусоидальная деформация
+      const wingBoost = Math.abs(Math.sin(angle)) > 0.7 ? 1.25 : 1.0;
+      const noise = 1 + Math.sin(angle * 4) * 0.08;
+      pts.push({
+        x: cx + Math.cos(angle) * rx * wingBoost * noise,
+        y: cy + Math.sin(angle) * ry * noise,
       });
     }
-    // Замыкаем
-    this.targetPath.push({ ...this.targetPath[0] });
+    return pts;
+  }
+
+  /** Маска: скруглённый прямоугольник с «подбородком». */
+  private buildMask(): Array<{ x: number; y: number }> {
+    const cx = this.W / 2;
+    const cy = this.H / 2;
+    const pts: Array<{ x: number; y: number }> = [];
+    const steps = 28;
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * Math.PI * 2;
+      // Базовая форма — эллипс
+      let rx = 85;
+      let ry = 120;
+      // Заостряем снизу (подбородок)
+      if (Math.sin(angle) > 0.6) {
+        ry *= 1.15;
+        rx *= 0.85;
+      }
+      // Расширяем сверху (лоб)
+      if (Math.sin(angle) < -0.5) {
+        rx *= 1.1;
+      }
+      pts.push({ x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry });
+    }
+    return pts;
+  }
+
+  /** Кольцо: круг с внутренним отверстием (игрок обводит внешний контур). */
+  private buildRing(): Array<{ x: number; y: number }> {
+    const cx = this.W / 2;
+    const cy = this.H / 2;
+    const pts: Array<{ x: number; y: number }> = [];
+    const steps = 32;
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * Math.PI * 2;
+      const wobble = 1 + Math.sin(angle * 6) * 0.05;
+      pts.push({
+        x: cx + Math.cos(angle) * 115 * wobble,
+        y: cy + Math.sin(angle) * 115 * wobble,
+      });
+    }
+    return pts;
   }
 
   private render(): void {

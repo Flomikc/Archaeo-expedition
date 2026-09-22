@@ -196,4 +196,7 @@ class Game {
   }
 }
 
+import * as ArtifactsData from "./data/ArtifactsData";
+(window as unknown as { __artifactMeta: typeof ArtifactsData }).__artifactMeta = ArtifactsData;
+
 new Game();

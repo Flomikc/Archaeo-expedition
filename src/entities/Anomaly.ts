@@ -12,13 +12,13 @@ export type AnomalyState = "patrol" | "chase";
 export interface AnomalyOptions {
   scene: Scene;
   position: Vector3;
+  /** Этаж, на котором обитает аномалия. */
+  floor: number;
+  /** Высота одного этажа (нужна для проверки «на одном ли этаже игрок»). */
+  floorHeight: number;
   pickPatrolPoint: () => Vector3;
 }
 
-/**
- * Аномалия «кошко-призрак».
- * Визуал — createAnomalyPlaceholder() в placeholders.ts.
- */
 export class Anomaly {
   private static readonly SPEED = 2.8;
   private static readonly CHASE_RADIUS = 9;
@@ -29,8 +29,10 @@ export class Anomaly {
 
   readonly root: TransformNode;
   readonly meshes: AbstractMesh[];
+  readonly floor: number;
 
   private readonly scene: Scene;
+  private readonly floorHeight: number;
   private readonly pickPatrolPoint: () => Vector3;
 
   private state: AnomalyState = "patrol";
@@ -41,6 +43,8 @@ export class Anomaly {
 
   constructor(options: AnomalyOptions) {
     this.scene = options.scene;
+    this.floor = options.floor;
+    this.floorHeight = options.floorHeight;
     this.pickPatrolPoint = options.pickPatrolPoint;
 
     const placeholder = createAnomalyPlaceholder(this.scene);
@@ -62,11 +66,25 @@ export class Anomaly {
     toPlayer.y = 0;
     const distanceToPlayer = toPlayer.length();
 
-    if (this.state === "patrol" && distanceToPlayer < Anomaly.CHASE_RADIUS) {
-      this.state = "chase";
-    } else if (this.state === "chase" && distanceToPlayer > Anomaly.LOSE_RADIUS) {
-      this.state = "patrol";
-      this.patrolTarget = this.pickPatrolPoint();
+    // === ПРОВЕРКА ЭТАЖА ===
+    // Игрок считается «на этом же этаже», если его Y близок к Y аномалии.
+    // Допуск = половина высоты этажа.
+    const dy = Math.abs(playerPosition.y - position.y);
+    const sameFloor = dy < this.floorHeight * 0.6;
+
+    if (!sameFloor) {
+      // Игрок на другом этаже → аномалия теряет цель и патрулирует
+      if (this.state === "chase") {
+        this.state = "patrol";
+        this.patrolTarget = this.pickPatrolPoint();
+      }
+    } else {
+      if (this.state === "patrol" && distanceToPlayer < Anomaly.CHASE_RADIUS) {
+        this.state = "chase";
+      } else if (this.state === "chase" && distanceToPlayer > Anomaly.LOSE_RADIUS) {
+        this.state = "patrol";
+        this.patrolTarget = this.pickPatrolPoint();
+      }
     }
 
     let damage = 0;
@@ -76,7 +94,7 @@ export class Anomaly {
         const dir = toPlayer.scale(1 / distanceToPlayer);
         this.move(dir, Anomaly.SPEED * dt);
       }
-      if (distanceToPlayer < Anomaly.ATTACK_RADIUS && this.attackCooldown <= 0) {
+      if (sameFloor && distanceToPlayer < Anomaly.ATTACK_RADIUS && this.attackCooldown <= 0) {
         damage = Anomaly.ATTACK_DAMAGE;
         this.attackCooldown = Anomaly.ATTACK_COOLDOWN;
         this.state = "patrol";
@@ -95,13 +113,14 @@ export class Anomaly {
       }
     }
 
-    this.root.position.y = 0.15 + Math.sin(this.time * 2.2) * 0.12;
+    // Держим Y на уровне пола своего этажа + лёгкое парение
+    const baseY = this.floor * this.floorHeight;
+    this.root.position.y = baseY + 0.15 + Math.sin(this.time * 2.2) * 0.12;
     return damage;
   }
 
   private move(direction: Vector3, amount: number): void {
     this.root.position.addInPlace(direction.scale(amount));
-    this.root.position.y = 0;
   }
 
   dispose(): void {

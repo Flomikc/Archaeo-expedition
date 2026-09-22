@@ -2,7 +2,7 @@ import { getArtifact } from "../data/ArtifactsData";
 import { SaveSystem } from "./SaveSystem";
 
 export class ArtifactSystem {
-  /** Финальная цена артефакта с учётом качества. */
+  /** Финальная цена с учётом качества. */
   static getPrice(index: number): number {
     const data = SaveSystem.get();
     const art = data.artifacts[index];
@@ -23,10 +23,8 @@ export class ArtifactSystem {
   }
 
   /**
-   * Слияние 3 одинаковых отреставрированных артефактов
-   * в 1 более редкий. Возвращает:
-   *  • { ok: true, newId } при успехе
-   *  • { ok: false, reason } иначе
+   * Слияние: находит 3 одинаковых отреставрированных артефакта,
+   * удаляет их и создаёт 1 «сырой» более высокого уровня.
    */
   static mergeFirstOfKind(baseIndex: number):
     | { ok: true; newId: string; quality: number }
@@ -34,28 +32,27 @@ export class ArtifactSystem {
     const data = SaveSystem.get();
     const base = data.artifacts[baseIndex];
     if (!base) return { ok: false, reason: "Артефакт не найден" };
-    if (!base.restored) return { ok: false, reason: "Нужна реставрация" };
+    if (!base.restored) return { ok: false, reason: "Сначала реставрируйте" };
 
     const def = getArtifact(base.id);
     if (!def) return { ok: false, reason: "Неизвестный артефакт" };
     if (!def.evolvesInto) return { ok: false, reason: "Максимальный уровень" };
 
-    // Ищем ещё 2 таких же
     const indices: number[] = [];
     for (let i = 0; i < data.artifacts.length; i++) {
       const a = data.artifacts[i];
       if (a.restored && a.id === base.id) indices.push(i);
       if (indices.length === 3) break;
     }
-    if (indices.length < 3) return { ok: false, reason: "Нужно 3 одинаковых" };
+    if (indices.length < 3) {
+      return { ok: false, reason: `Нужно 3 одинаковых (есть ${indices.length})` };
+    }
 
-    // Среднее качество
     const avgQuality =
       indices.reduce((sum, i) => sum + data.artifacts[i].quality, 0) / indices.length;
 
     SaveSystem.removeArtifacts(indices);
 
-    // Добавляем новый артефакт (сначала «сырой» — требует реставрации)
     const save = SaveSystem.get();
     save.artifacts.push({
       id: def.evolvesInto,

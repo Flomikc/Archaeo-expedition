@@ -88,10 +88,11 @@ export class DesertScene {
     this.player = new Player({
       scene: this.scene,
       canvas: options.canvas,
-      position: new Vector3(-13, 1.7, 2),
+      // Стартовая точка — сразу у задней двери фургона, смотря в сторону пирамиды
+      position: new Vector3(-9, 1.7, 0),
       speed: 4.2,
     });
-    this.player.camera.rotation.y = -0.4;
+    this.player.camera.rotation.y = Math.PI / 2;
 
     this.interaction = new InteractionSystem(this.scene, this.player.camera);
 
