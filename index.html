@@ -39,14 +39,14 @@
       }
 
       h1 { font-size: 34px; letter-spacing: 1px; color: #e8c98a; }
-      h2 { font-size: 24px; color: #e8c98a; margin-bottom: 10px; }
+      h2 { font-size: 22px; color: #e8c98a; margin-bottom: 8px; }
       .subtitle { opacity: 0.6; font-size: 14px; }
 
       button {
         font: inherit;
-        font-size: 17px;
-        padding: 12px 32px;
-        min-width: 220px;
+        font-size: 16px;
+        padding: 10px 26px;
+        min-width: 180px;
         border: 1px solid #6b5a36;
         border-radius: 6px;
         background: rgba(60, 48, 28, 0.85);
@@ -56,6 +56,7 @@
       }
       button:hover { background: rgba(96, 76, 42, 0.95); }
       button:active { transform: scale(0.98); }
+      button:disabled { opacity: 0.4; cursor: not-allowed; }
       button.primary {
         background: rgba(150, 110, 40, 0.9);
         border-color: #c9a45a;
@@ -73,7 +74,7 @@
         background: rgba(18, 16, 12, 0.95);
       }
 
-      .coins { font-size: 15px; opacity: 0.8; }
+      .coins { font-size: 15px; opacity: 0.85; color: #e8c98a; }
 
       /* ---------- HUD ---------- */
       #hud {
@@ -161,9 +162,132 @@
         font-size: 16px;
       }
 
-      /* ---------- Ноутбук ---------- */
-      .map { display: flex; gap: 12px; }
-      .location { min-width: 140px; padding: 18px 12px; font-size: 15px; }
+      /* ================= НОУТБУК ================= */
+      #laptop-menu {
+        position: absolute; inset: 0;
+        z-index: 40;
+        background: transparent;   /* камера видит ноут, поэтому фон прозрачный */
+        pointer-events: none;      /* кликабельны только элементы ноутбука */
+      }
+      #laptop-menu:not(.hidden) { display: flex; align-items: center; justify-content: center; }
+      #laptop-menu.hidden { display: none; }
+
+      .laptop-frame {
+        width: 720px;
+        max-width: 92vw;
+        height: 460px;
+        max-height: 82vh;
+        display: flex;
+        flex-direction: column;
+        border: 2px solid #3a3024;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #1a150f 0%, #0f0b07 100%);
+        box-shadow: 0 0 60px rgba(201, 164, 90, 0.18), 0 0 0 4px rgba(0,0,0,0.6);
+        overflow: hidden;
+        pointer-events: auto;
+      }
+
+      .laptop-tabs {
+        display: flex;
+        gap: 2px;
+        padding: 8px 10px 0 10px;
+        background: rgba(0, 0, 0, 0.55);
+        border-bottom: 1px solid #3a3024;
+      }
+      .laptop-tab {
+        min-width: 0;
+        padding: 8px 16px;
+        font-size: 14px;
+        border: 1px solid #3a3024;
+        border-bottom: none;
+        border-radius: 6px 6px 0 0;
+        background: rgba(30, 24, 16, 0.7);
+        color: #b9a982;
+        cursor: pointer;
+      }
+      .laptop-tab.active {
+        background: #1a150f;
+        color: #e8c98a;
+        border-color: #6b5a36;
+      }
+      .laptop-tab.close-tab {
+        margin-left: auto;
+        background: rgba(80, 30, 20, 0.6);
+        color: #e8a08a;
+        border-color: #6b3a2a;
+      }
+      .laptop-tab.close-tab:hover { background: rgba(120, 40, 25, 0.8); }
+
+      .laptop-body {
+        flex: 1;
+        padding: 16px 20px;
+        overflow-y: auto;
+        color: #d6c9a8;
+      }
+      .laptop-body .tab-panel { display: block; }
+      .laptop-body .tab-panel.hidden { display: none; }
+
+      .laptop-footer {
+        padding: 8px 16px;
+        border-top: 1px solid #3a3024;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        color: #b9a982;
+      }
+
+      /* ---------- Сетка карты ---------- */
+      .map-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 12px;
+      }
+      .map-card {
+        display: flex; flex-direction: column; gap: 4px;
+        padding: 14px;
+        border: 1px solid #4a3f28;
+        border-radius: 8px;
+        background: rgba(30, 24, 16, 0.6);
+        cursor: pointer;
+        transition: background 0.15s;
+        text-align: left;
+      }
+      .map-card:hover { background: rgba(60, 48, 28, 0.9); }
+      .map-card.locked { opacity: 0.5; cursor: not-allowed; }
+      .map-card b { color: #e8c98a; font-size: 15px; }
+      .map-card small { opacity: 0.7; font-size: 12px; }
+
+      /* ---------- Магазин ---------- */
+      .shop-list { display: flex; flex-direction: column; gap: 8px; }
+      .shop-item {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+        padding: 10px 14px;
+        border: 1px solid #4a3f28;
+        border-radius: 8px;
+        background: rgba(30, 24, 16, 0.6);
+      }
+      .shop-item b { color: #e8c98a; }
+      .shop-item small { opacity: 0.7; font-size: 12px; display: block; margin-top: 2px; }
+      .shop-price { color: #d9a441; font-weight: 600; }
+      .shop-item button { min-width: 0; padding: 6px 14px; font-size: 13px; }
+
+      /* ---------- Инвентарь ---------- */
+      .inv-list { display: flex; flex-direction: column; gap: 8px; }
+      .inv-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border: 1px solid #4a3f28;
+        border-radius: 8px;
+        background: rgba(30, 24, 16, 0.6);
+      }
+      .empty-msg { opacity: 0.55; padding: 20px; text-align: center; font-size: 14px; }
 
       /* ---------- Настройки ---------- */
       .slider-row {
@@ -230,15 +354,58 @@
       <p class="subtitle">WASD — ходьба · Shift — бег · Space — прыжок · E — взаимодействие · F/ЛКМ — фото · Колесо — фонарик · ESC — пауза</p>
     </div>
 
-    <!-- ================ Ноутбук ================ -->
-    <div id="laptop-menu" class="overlay hidden">
-      <div class="panel">
-        <h2>Ноутбук — карта локаций</h2>
-        <div class="map">
-          <button id="btn-egypt" class="location">Египет<br /><small>Пирамида</small></button>
+    <!-- ================ НОУТБУК ================ -->
+    <div id="laptop-menu" class="hidden">
+      <div class="laptop-frame">
+        <div class="laptop-tabs">
+          <button class="laptop-tab active" data-tab="map">Карта</button>
+          <button class="laptop-tab" data-tab="shop">Магазин</button>
+          <button class="laptop-tab" data-tab="inventory">Артефакты</button>
+          <button class="laptop-tab" data-tab="records">Записи</button>
+          <button class="laptop-tab close-tab" id="btn-laptop-close">Esc · Закрыть</button>
         </div>
-        <div class="coins">Монеты: <span id="laptop-coins">0</span></div>
-        <button id="btn-laptop-close">Закрыть</button>
+
+        <div class="laptop-body">
+          <!-- Карта -->
+          <div id="tab-map" class="tab-panel">
+            <div class="map-grid" id="map-grid">
+              <button class="map-card" data-location="egypt">
+                <b>Египет</b>
+                <small>Пирамида фараона · уровень 1</small>
+              </button>
+              <button class="map-card locked" data-location="jungle" disabled>
+                <b>Джунгли</b>
+                <small>Скоро</small>
+              </button>
+              <button class="map-card locked" data-location="antarctica" disabled>
+                <b>Антарктида</b>
+                <small>Скоро</small>
+              </button>
+            </div>
+          </div>
+
+          <!-- Магазин -->
+          <div id="tab-shop" class="tab-panel hidden">
+            <div class="shop-list" id="shop-list"></div>
+          </div>
+
+          <!-- Артефакты -->
+          <div id="tab-inventory" class="tab-panel hidden">
+            <div class="inv-list" id="inv-list">
+              <div class="empty-msg">Пока пусто. Артефакты появятся здесь после экспедиций.</div>
+            </div>
+          </div>
+
+          <!-- Записи -->
+          <div id="tab-records" class="tab-panel hidden">
+            <div class="empty-msg">Аудиодневники и записки будут доступны в следующих версиях.</div>
+          </div>
+        </div>
+
+        <div class="laptop-footer">
+          <span>Ноутбук · Дело №0047</span>
+          <span>Монеты: <span id="laptop-coins">0</span></span>
+        </div>
       </div>
     </div>
 

@@ -18,8 +18,9 @@ import { Drill } from "../entities/Drill";
 import { Player } from "../entities/Player";
 import { Atmosphere } from "../systems/Atmosphere";
 import { InteractionSystem } from "../systems/InteractionSystem";
-import { Cell, LevelData, LevelGenerator } from "../systems/LevelGenerator";
+import { LevelData, LevelGenerator, PathNode } from "../systems/LevelGenerator";
 import { SaveSystem } from "../systems/SaveSystem";
+import { ShopSystem } from "../systems/ShopSystem";
 import { HUD } from "../ui/HUD";
 
 export interface ExpeditionSceneOptions {
@@ -30,11 +31,12 @@ export interface ExpeditionSceneOptions {
   onRestart: () => void;
 }
 
-const MISSION_TIME = 420; // 7 минут (больше этажей)
+const MISSION_TIME = 420;
 const SPAWN_INTERVAL = 25;
 const MAX_ANOMALIES = 4;
 const PHOTO_RANGE = 12;
 const START_PHOTOS = 8;
+const PIT_DEPTH = 2.5;
 
 export class ExpeditionScene {
   readonly scene: Scene;
@@ -50,13 +52,14 @@ export class ExpeditionScene {
   private readonly interaction: InteractionSystem;
   private readonly exitMarker: Mesh;
   private readonly atmosphere: Atmosphere;
-  private cameraItem: CameraItem | null = null;
 
+  private cameraItem: CameraItem | null = null;
   private anomalies: Anomaly[] = [];
   private torches: PointLight[] = [];
 
   private hp = 100;
   private photos = START_PHOTOS;
+  private medkits = 0;
   private timeLeft = MISSION_TIME;
   private spawnTimer = 0;
   private shotCooldown = 0;
@@ -69,31 +72,16 @@ export class ExpeditionScene {
     if (e.code === "KeyE") {
       this.interaction.interact();
     } else if (e.code === "KeyF") {
-      if (!this.hasCamera) {
-        this.hud.showToast("Нет фотоаппарата!");
-        return;
-      }
-      if (this.shotCooldown > 0) return;
-      this.shotCooldown = 0.35;
-      this.takePhoto();
+      this.tryPhoto();
+    } else if (e.code === "KeyH") {
+      this.tryMedkit();
     }
   };
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (this.finished || e.button !== 0) return;
-    if (!this.hasCamera) return;
-    if (this.shotCooldown > 0) return;
-    this.shotCooldown = 0.35;
-    this.takePhoto();
+    this.tryPhoto();
   };
-
-  setEnabled(value: boolean): void {
-    this.player.setEnabled(value);
-  }
-
-  shouldSuppressPause(): boolean {
-    return this.finished;
-  }
 
   constructor(options: ExpeditionSceneOptions) {
     this.options = options;
@@ -102,43 +90,58 @@ export class ExpeditionScene {
     this.engine = options.engine;
 
     this.scene = new Scene(options.engine);
-    this.scene.clearColor = new Color4(0.015, 0.015, 0.02, 1);
+    this.scene.clearColor = new Color4(0.01, 0.01, 0.015, 1);
     this.scene.collisionsEnabled = true;
 
     this.atmosphere = new Atmosphere(this.scene);
     this.atmosphere.apply("pyramid");
 
     const ambient = new HemisphericLight("expAmbient", new Vector3(0, 1, 0), this.scene);
-    ambient.intensity = 0.12;
-    ambient.diffuse = new Color3(0.4, 0.35, 0.28);
-    ambient.groundColor = new Color3(0.05, 0.04, 0.03);
+    ambient.intensity = 0.18;
+    ambient.diffuse = new Color3(0.55, 0.45, 0.32);
+    ambient.groundColor = new Color3(0.08, 0.06, 0.04);
 
+    // Бонусы магазина
+    const bonuses = ShopSystem.getRuntimeBonuses();
+    this.hasCamera = SaveSystem.get().hasCamera;
+    this.photos = START_PHOTOS + bonuses.startPhotosBonus;
+    this.medkits = bonuses.medkitCount;
+
+    // Генерация уровня
     const save = SaveSystem.get();
     const seed = save.levelSeed ?? (Date.now() & 0xffffffff);
     SaveSystem.setLevelSeed(seed);
-
     this.level = new LevelGenerator().build(this.scene, seed);
 
+    // Игрок
+    const startNode = this.level.start;
+    const startFloorY = startNode.cell.floor * LevelGenerator.FLOOR_HEIGHT;
     this.player = new Player({
       scene: this.scene,
       canvas: this.canvas,
-      position: this.level.cellCenter(this.level.start).add(new Vector3(0, 1.7, 0)),
+      position: new Vector3(startNode.centerX, startFloorY + 1.7, startNode.centerZ),
     });
     this.player.enableFlashlight();
 
-    this.hasCamera = save.hasCamera;
+    // Фотоаппарат — если он есть в сохранении
     if (this.hasCamera) {
       this.cameraItem = new CameraItem(this.scene, new Vector3(0, -10, 0));
       this.cameraItem.pickup(this.player.camera);
     }
 
-    const goalCenter = this.level.cellCenter(this.level.goal);
+    // Бур — с апгрейдом скорости
+    const goalNode = this.level.goal;
+    const goalFloorY = goalNode.cell.floor * LevelGenerator.FLOOR_HEIGHT;
     this.drill = new Drill(
       this.scene,
-      goalCenter.add(new Vector3(0, -3.5, 0)) // на дне ямы (4 м вниз + 0.5 высоты бура)
+      new Vector3(goalNode.centerX, goalFloorY - PIT_DEPTH + 0.5, goalNode.centerZ),
+      bonuses.drillSpeedMultiplier
     );
 
-    this.exitMarker = this.createExitMarker(this.level.cellCenter(this.level.start));
+    // Маркер выхода
+    this.exitMarker = this.createExitMarker(
+      new Vector3(startNode.centerX, startFloorY, startNode.centerZ)
+    );
     this.exitMarker.setEnabled(false);
 
     this.placeTorches();
@@ -167,8 +170,23 @@ export class ExpeditionScene {
     this.hud.setDrillProgress(false, 0);
     this.hud.setHint(null);
 
+    if (!this.hasCamera) {
+      this.hud.showToast("Фотоаппарат не взят в фуре", 3500);
+    }
+    if (this.medkits > 0) {
+      this.hud.showToast(`Аптечек: ${this.medkits} (клавиша H)`, 2500);
+    }
+
     window.addEventListener("keydown", this.onKeyDown);
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
+  }
+
+  setEnabled(value: boolean): void {
+    this.player.setEnabled(value);
+  }
+
+  shouldSuppressPause(): boolean {
+    return this.finished;
   }
 
   update(dt: number): void {
@@ -208,13 +226,11 @@ export class ExpeditionScene {
       }
     }
 
-    // Факелы мигают
     const t = performance.now() / 1000;
     for (let i = 0; i < this.torches.length; i++) {
-      this.torches[i].intensity = 0.55 + Math.sin(t * 3.1 + i * 1.7) * 0.18;
+      this.torches[i].intensity = 0.7 + Math.sin(t * 3.1 + i * 1.7) * 0.2;
     }
 
-    // Ловушки: если игрок ниже пола комнаты trap — урон
     this.checkTrapDamage(dt);
 
     const playerPosition = this.player.camera.position;
@@ -243,42 +259,84 @@ export class ExpeditionScene {
     this.scene.dispose();
   }
 
+  // ============================================================= helpers
+
+  private tryPhoto(): void {
+    if (this.finished) return;
+    if (!this.hasCamera) {
+      this.hud.showToast("Нет фотоаппарата!");
+      return;
+    }
+    if (this.shotCooldown > 0) return;
+    this.shotCooldown = 0.35;
+    this.takePhoto();
+  }
+
+  private tryMedkit(): void {
+    if (this.finished) return;
+    if (this.medkits <= 0) {
+      this.hud.showToast("Аптечек нет");
+      return;
+    }
+    if (this.hp >= 100) {
+      this.hud.showToast("Здоровье полное");
+      return;
+    }
+    if (!ShopSystem.consume("medkit")) {
+      this.hud.showToast("Аптечек нет");
+      return;
+    }
+    this.medkits -= 1;
+    this.hp = Math.min(100, this.hp + 50);
+    this.hud.setHp(this.hp);
+    this.hud.showToast(`+50 HP · осталось аптечек: ${this.medkits}`, 2200);
+  }
+
   private placeTorches(): void {
     const mat = new StandardMaterial("torchMat", this.scene);
     mat.diffuseColor = new Color3(0.3, 0.15, 0.05);
     mat.emissiveColor = new Color3(0.6, 0.3, 0.05);
 
-    for (let f = 0; f < this.level.floors; f++) {
-      for (let n = 0; n < 3; n++) {
-        const i = Math.floor(Math.random() * this.level.size);
-        const j = Math.floor(Math.random() * this.level.size);
-        const center = this.level.cellCenter({ i, j, floor: f });
-        const light = new PointLight(`torch${f}_${n}`, center.add(new Vector3(0, 2.5, 0)), this.scene);
-        light.diffuse = new Color3(1, 0.55, 0.2);
-        light.intensity = 0.6;
-        light.range = 10;
-        this.torches.push(light);
+    const nodes = this.level.nodes;
+    for (let idx = 2; idx < nodes.length - 1; idx += 3) {
+      const node = nodes[idx];
+      const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+      const pos = new Vector3(node.centerX, floorY + 2.7, node.centerZ);
 
-        const flame = MeshBuilder.CreateSphere(`flame${f}_${n}`, { diameter: 0.25 }, this.scene);
-        flame.position = center.add(new Vector3(0, 2.5, 0));
-        flame.material = mat;
-        flame.isPickable = false;
-      }
+      const light = new PointLight(`torch${idx}`, pos, this.scene);
+      light.diffuse = new Color3(1, 0.55, 0.2);
+      light.intensity = 0.85;
+      light.range = 12;
+      this.torches.push(light);
+
+      const flame = MeshBuilder.CreateSphere(`flame${idx}`, { diameter: 0.28 }, this.scene);
+      flame.position.copyFrom(pos);
+      flame.material = mat;
+      flame.isPickable = false;
     }
   }
 
   private checkTrapDamage(dt: number): void {
     const pos = this.player.camera.position;
-    for (const [, room] of this.level.rooms) {
-      if (room.type !== "trap") continue;
-      const c = this.level.cellCenter(room.cell);
-      const dx = pos.x - c.x;
-      const dz = pos.z - c.z;
-      if (Math.abs(dx) < 2.5 && Math.abs(dz) < 2.5 && pos.y < c.y + 1.2) {
-        // На шипах
+    for (const node of this.level.nodes) {
+      if (node.type !== "trap") continue;
+
+      const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+      const offset = Math.min(node.sizeX, node.sizeZ) * 0.3;
+      const pitX = (node.doors.n || node.doors.s) ? node.centerX + offset : node.centerX;
+      const pitZ = (node.doors.w || node.doors.e) ? node.centerZ + offset : node.centerZ;
+
+      const dx = pos.x - pitX;
+      const dz = pos.z - pitZ;
+      const inX = Math.abs(dx) < 1.6;
+      const inZ = Math.abs(dz) < 1.6;
+      const lowEnough = pos.y < floorY + 0.6;
+
+      if (inX && inZ && lowEnough) {
         this.hp = Math.max(0, this.hp - 8 * dt);
         this.hud.setHp(this.hp);
         if (this.hp <= 0) this.finishMission(false);
+        return;
       }
     }
   }
@@ -317,23 +375,26 @@ export class ExpeditionScene {
 
   private spawnAnomaly(): void {
     const playerPosition = this.player.camera.position;
-    let cell: Cell = this.level.goal;
-    for (let attempt = 0; attempt < 24; attempt++) {
-      cell = {
-        i: Math.floor(Math.random() * this.level.size),
-        j: Math.floor(Math.random() * this.level.size),
-        floor: Math.floor(Math.random() * this.level.floors),
-      };
-      const center = this.level.cellCenter(cell);
-      const dx = center.x - playerPosition.x;
-      const dz = center.z - playerPosition.z;
-      const dy = center.y - playerPosition.y;
-      if (Math.sqrt(dx * dx + dz * dz + dy * dy) > 18) break;
+    const nodes = this.level.nodes;
+
+    let bestNode: PathNode = nodes[Math.floor(nodes.length / 2)];
+    let bestDist = 0;
+    for (const node of nodes) {
+      if (node.isStart || node.isGoal) continue;
+      const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+      const dx = node.centerX - playerPosition.x;
+      const dz = node.centerZ - playerPosition.z;
+      const dy = floorY - playerPosition.y;
+      const dist = Math.sqrt(dx * dx + dz * dz + dy * dy);
+      if (dist > 15 && dist > bestDist) {
+        bestDist = dist;
+        bestNode = node;
+      }
     }
-    const center = this.level.cellCenter(cell);
-    const position = center.add(
-      new Vector3((Math.random() - 0.5) * 8, 0, (Math.random() - 0.5) * 8)
-    );
+
+    const floorY = bestNode.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+    const position = new Vector3(bestNode.centerX, floorY, bestNode.centerZ);
+
     this.anomalies.push(
       new Anomaly({
         scene: this.scene,
@@ -344,11 +405,10 @@ export class ExpeditionScene {
   }
 
   private pickPatrolPoint(): Vector3 {
-    const i = Math.floor(Math.random() * this.level.size);
-    const j = Math.floor(Math.random() * this.level.size);
-    const floor = Math.floor(Math.random() * this.level.floors);
-    const center = this.level.cellCenter({ i, j, floor });
-    return center.add(new Vector3((Math.random() - 0.5) * 8, 0, (Math.random() - 0.5) * 8));
+    const nodes = this.level.nodes;
+    const node = nodes[Math.floor(Math.random() * nodes.length)];
+    const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+    return new Vector3(node.centerX, floorY, node.centerZ);
   }
 
   private takePhoto(): void {
@@ -413,7 +473,18 @@ export class ExpeditionScene {
     const spent = Math.max(0, MISSION_TIME - this.timeLeft);
 
     if (success) {
-      SaveSystem.addCoins(100);
+      // Рассчитываем награду
+      const baseReward = 100;
+      const speedBonus = Math.max(0, Math.floor((MISSION_TIME / 2 - spent) / 5));
+      const photosBonus = this.photos * 5;
+      const totalReward = baseReward + speedBonus + photosBonus;
+
+      SaveSystem.addCoins(totalReward);
+
+      // Артефакт в инвентарь
+      const quality = Math.min(1, 0.6 + this.hp / 500);
+      SaveSystem.addArtifact("Скарабей", "egypt", quality);
+
       this.hud.showResult(
         "Вердикт миссии",
         [
@@ -421,7 +492,8 @@ export class ExpeditionScene {
           `Время экспедиции: ${this.formatDuration(spent)}`,
           `Осталось снимков: ${this.photos}`,
           `Здоровье: ${Math.round(this.hp)}%`,
-          "Награда: 100 монет",
+          `Артефакт: Скарабей (${Math.round(quality * 100)}%)`,
+          `Награда: ${totalReward} монет`,
         ],
         [{ label: "Вернуться в фуру", primary: true, action: () => this.options.onReturnToHub() }]
       );

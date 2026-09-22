@@ -48,7 +48,9 @@ export class HUD {
   private readonly laptopMenu = el<HTMLDivElement>("laptop-menu");
   private readonly laptopCoins = el<HTMLSpanElement>("laptop-coins");
   private readonly btnLaptopClose = el<HTMLButtonElement>("btn-laptop-close");
-  private readonly btnEgypt = el<HTMLButtonElement>("btn-egypt");
+  private readonly mapGrid = el<HTMLDivElement>("map-grid");
+  private readonly shopList = el<HTMLDivElement>("shop-list");
+  private readonly invList = el<HTMLDivElement>("inv-list");
 
   // --- Настройки ---
   private readonly settingsMenu = el<HTMLDivElement>("settings-menu");
@@ -73,6 +75,10 @@ export class HUD {
 
   private settingsHandlers: SettingsHandlers | null = null;
   private settingsBound = false;
+
+  private shopBuyHandler: ((id: string) => void) | null = null;
+  private locationSelectHandler: ((id: string) => void) | null = null;
+  private laptopCloseHandler: (() => void) | null = null;
 
   // ---------------------------------------------------------------- меню
 
@@ -154,18 +160,179 @@ export class HUD {
 
   // ------------------------------------------------------------- ноутбук
 
-  setLaptopHandlers(onEgypt: () => void, onClose: () => void): void {
-    this.btnEgypt.onclick = onEgypt;
-    this.btnLaptopClose.onclick = onClose;
+  setLaptopHandlers(handlers: {
+    onClose: () => void;
+    onSelectLocation: (id: string) => void;
+    onBuyItem: (id: string) => void;
+  }): void {
+    this.laptopCloseHandler = handlers.onClose;
+    this.locationSelectHandler = handlers.onSelectLocation;
+    this.shopBuyHandler = handlers.onBuyItem;
+
+    this.btnLaptopClose.onclick = () => this.laptopCloseHandler?.();
+
+    const tabs = this.laptopMenu.querySelectorAll<HTMLButtonElement>(".laptop-tab[data-tab]");
+    tabs.forEach((tab) => {
+      tab.onclick = () => this.setLaptopTab(tab.dataset.tab ?? "map");
+    });
+
+    const cards = this.mapGrid.querySelectorAll<HTMLButtonElement>(".map-card");
+    cards.forEach((card) => {
+      card.onclick = () => {
+        if (card.disabled || card.classList.contains("locked")) return;
+        const id = card.dataset.location;
+        if (id) this.locationSelectHandler?.(id);
+      };
+    });
+  }
+
+  setLaptopTab(tabId: string): void {
+    const tabs = this.laptopMenu.querySelectorAll<HTMLButtonElement>(".laptop-tab[data-tab]");
+    tabs.forEach((tab) => {
+      tab.classList.toggle("active", tab.dataset.tab === tabId);
+    });
+    const panels = this.laptopMenu.querySelectorAll<HTMLDivElement>(".tab-panel");
+    panels.forEach((panel) => {
+      panel.classList.toggle("hidden", panel.id !== `tab-${tabId}`);
+    });
   }
 
   showLaptop(coins: number): void {
     this.laptopCoins.textContent = String(coins);
     this.laptopMenu.classList.remove("hidden");
+    this.setLaptopTab("map");
   }
 
   hideLaptop(): void {
     this.laptopMenu.classList.add("hidden");
+  }
+
+  setLaptopCoins(coins: number): void {
+    this.laptopCoins.textContent = String(coins);
+  }
+
+  renderShop(
+    items: Array<{
+      id: string;
+      name: string;
+      description: string;
+      price: number;
+      owned: number;
+      maxStack?: number;
+      unique?: boolean;
+    }>
+  ): void {
+    this.shopList.innerHTML = "";
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "shop-item";
+
+      const maxed = (item.maxStack && item.owned >= item.maxStack) ||
+        (item.unique && item.owned > 0);
+
+      const left = document.createElement("div");
+      const title = document.createElement("b");
+      title.textContent = item.name;
+      if (item.owned > 0) title.textContent += ` ×${item.owned}`;
+      left.appendChild(title);
+      const desc = document.createElement("small");
+      desc.textContent = item.description;
+      left.appendChild(desc);
+
+      const price = document.createElement("span");
+      price.className = "shop-price";
+      price.textContent = `${item.price} ⛁`;
+
+      const btn = document.createElement("button");
+      btn.textContent = maxed ? "Куплено" : "Купить";
+      btn.disabled = !!maxed;
+      btn.onclick = () => {
+        this.shopBuyHandler?.(item.id);
+      };
+
+      row.appendChild(left);
+      row.appendChild(price);
+      row.appendChild(btn);
+      this.shopList.appendChild(row);
+    }
+  }
+
+  private artifactHandlers: {
+    onRestore: (index: number) => void;
+    onSell: (index: number) => void;
+    onMerge: (indices: number[]) => void;
+  } | null = null;
+
+  setArtifactHandlers(handlers: {
+    onRestore: (index: number) => void;
+    onSell: (index: number) => void;
+    onMerge: (indices: number[]) => void;
+  }): void {
+    this.artifactHandlers = handlers;
+  }
+
+  renderInventory(
+    artifacts: Array<{ id: string; location: string; quality: number; restored: boolean }>
+  ): void {
+    this.invList.innerHTML = "";
+    if (artifacts.length === 0) {
+      const msg = document.createElement("div");
+      msg.className = "empty-msg";
+      msg.textContent = "Пока пусто. Артефакты появятся после экспедиций.";
+      this.invList.appendChild(msg);
+      return;
+    }
+
+    // Импортируем данные артефактов через динамический require не выйдет,
+    // поэтому просто дублируем ключевые поля (id и название уже в данных).
+    for (let i = 0; i < artifacts.length; i++) {
+      const art = artifacts[i];
+      const row = document.createElement("div");
+      row.className = "inv-item";
+      row.style.borderLeft = `4px solid ${art.restored ? "#c9a45a" : "#6b5a36"}`;
+
+      const left = document.createElement("div");
+      const t = document.createElement("b");
+      t.textContent = art.id;
+      const s = document.createElement("small");
+      s.textContent = `${art.location} · качество ${Math.round(art.quality * 100)}%${art.restored ? " · отреставрирован" : " · требует реставрации"}`;
+      left.appendChild(t);
+      left.appendChild(s);
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.gap = "6px";
+
+      if (!art.restored) {
+        const btn = document.createElement("button");
+        btn.textContent = "Реставрировать";
+        btn.style.minWidth = "0";
+        btn.style.padding = "5px 12px";
+        btn.style.fontSize = "12px";
+        btn.onclick = () => this.artifactHandlers?.onRestore(i);
+        actions.appendChild(btn);
+      } else {
+        const sellBtn = document.createElement("button");
+        sellBtn.textContent = "Продать";
+        sellBtn.style.minWidth = "0";
+        sellBtn.style.padding = "5px 12px";
+        sellBtn.style.fontSize = "12px";
+        sellBtn.onclick = () => this.artifactHandlers?.onSell(i);
+        actions.appendChild(sellBtn);
+
+        const mergeBtn = document.createElement("button");
+        mergeBtn.textContent = "Слияние";
+        mergeBtn.style.minWidth = "0";
+        mergeBtn.style.padding = "5px 12px";
+        mergeBtn.style.fontSize = "12px";
+        mergeBtn.onclick = () => this.artifactHandlers?.onMerge([i]);
+        actions.appendChild(mergeBtn);
+      }
+
+      row.appendChild(left);
+      row.appendChild(actions);
+      this.invList.appendChild(row);
+    }
   }
 
   // ------------------------------------------------------------ настройки
@@ -190,9 +357,7 @@ export class HUD {
     this.btnSettingsBack.onclick = () => this.settingsHandlers?.onBackToHub();
   }
 
-  /** Обновляет значения слайдеров/лейблов. Вызывается при любом изменении настроек. */
   setSettingsValues(s: SettingsData): void {
-    // Программная установка value НЕ вызывает 'input' — цикла нет
     this.sensSlider.value = String(s.sensitivity);
     this.sensValue.textContent = s.sensitivity.toFixed(1);
 

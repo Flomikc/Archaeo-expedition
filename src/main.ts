@@ -105,7 +105,6 @@ class Game {
       canvas: this.canvas,
       hud: this.hud,
       onGoToDesert: () => this.startDesert(),
-      onGoToExpedition: () => this.startDesert(),
     });
     this.requestPointerLock();
   }

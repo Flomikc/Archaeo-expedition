@@ -11,11 +11,11 @@ import {
 } from "@babylonjs/core";
 
 import {
+  RoomDoors,
   RoomMaterials,
   RoomTemplate,
   RoomType,
   ROOM_TEMPLATES,
-  drillHallTemplate,
   pickRandomType,
 } from "../data/RoomTemplates";
 
@@ -25,26 +25,29 @@ export interface Cell {
   floor: number;
 }
 
-export interface RoomInfo {
+export interface PathNode {
   cell: Cell;
+  prevDir: "n" | "s" | "w" | "e" | "up" | null;
+  nextDir: "n" | "s" | "w" | "e" | "up" | null;
+  doors: RoomDoors;
   type: RoomType;
   template: RoomTemplate;
-  isDrillRoom: boolean;
+  centerX: number;
+  centerZ: number;
+  sizeX: number;
+  sizeZ: number;
+  isGoal: boolean;
+  isStart: boolean;
 }
 
 export interface LevelData {
-  readonly size: number;
-  readonly floors: number;
-  readonly cellSize: number;
-  readonly wallHeight: number;
-  readonly floorHeight: number;
-  readonly start: Cell;
-  readonly goal: Cell;
-  readonly connections: ReadonlySet<string>;
-  readonly rooms: ReadonlyMap<string, RoomInfo>;
+  readonly nodes: PathNode[];
+  readonly start: PathNode;
+  readonly goal: PathNode;
   readonly seed: number;
-  cellCenter(cell: Cell): Vector3;
-  roomKey(cell: Cell): string;
+  readonly floorHeight: number;
+  readonly wallHeight: number;
+  readonly cellSize: number;
 }
 
 function mulberry32(a: number): () => number {
@@ -56,241 +59,612 @@ function mulberry32(a: number): () => number {
   };
 }
 
-/**
- * Многоуровневая пирамида: 3 этажа × 4×4, лестницы, шаблоны комнат.
- * Комната с буром — увеличенная и опущена ниже уровня.
- */
+/** Параметры дыры под рампу (в метрах). */
+const HOLE_HALF_X = 2.2;    // половина ширины дыры по X
+const HOLE_HALF_Z = 3.6;    // половина длины дыры по Z
+const HOLE_Z_OFFSET = -3.0; // центр дыры смещён на север от центра комнаты
+
+/** Длина и высота подъёма рампы. Должны совпадать с дырой. */
+const RAMP_RUN = 6.0;
+const RAMP_RISE = 6.0;
+
 export class LevelGenerator {
-  static readonly SIZE = 4;
   static readonly FLOORS = 3;
   static readonly CELL_SIZE = 14;
-  static readonly WALL_HEIGHT = 4.2;
-  static readonly FLOOR_HEIGHT = 5.5;
+  static readonly WALL_HEIGHT = 4.5;
+  static readonly FLOOR_HEIGHT = 6.0;
+  static readonly PATH_LENGTH = 12;
 
-  private readonly connections = new Set<string>();
-  private readonly rooms = new Map<string, RoomInfo>();
   private rng: () => number = Math.random;
-
-  static connectionKey(a: Cell, b: Cell): string {
-    const k1 = `${a.floor},${a.i},${a.j}`;
-    const k2 = `${b.floor},${b.i},${b.j}`;
-    return k1 < k2 ? `${k1}|${k2}` : `${k2}|${k1}`;
-  }
-
-  static roomKey(cell: Cell): string {
-    return `${cell.floor},${cell.i},${cell.j}`;
-  }
+  private readonly gridW = 5;
+  private readonly gridD = 5;
 
   build(scene: Scene, seed?: number): LevelData {
-    this.connections.clear();
-    this.rooms.clear();
-
     const actualSeed = seed ?? (Date.now() & 0xffffffff);
     this.rng = mulberry32(actualSeed);
 
-    const size = LevelGenerator.SIZE;
-    const cellSize = LevelGenerator.CELL_SIZE;
-    const floors = LevelGenerator.FLOORS;
-
-    const start: Cell = { i: 0, j: 0, floor: 0 };
-    const goal: Cell = { i: size - 1, j: size - 1, floor: floors - 1 };
-
-    for (let f = 0; f < floors; f++) {
-      this.carveFloor(size, f);
-    }
-    this.placeStairs(size, floors);
-    this.assignRoomTypes(size, floors, goal);
-    this.ensureReachable(start, goal, size, floors);
+    const path = this.generateLinearPath();
+    this.assignTypesAndDoors(path);
+    this.layoutPath(path);
 
     const mats = this.createMaterials(scene);
-    this.buildGeometry(scene, size, floors, cellSize, mats);
-
-    const cellCenter = (cell: Cell): Vector3 => {
-      const room = this.rooms.get(LevelGenerator.roomKey(cell));
-      const offset = room?.template.floorOffset ?? 0;
-      const baseY = cell.floor * LevelGenerator.FLOOR_HEIGHT + offset;
-      return new Vector3(cell.i * cellSize, baseY, cell.j * cellSize);
-    };
+    for (const node of path) {
+      this.buildRoom(scene, node, mats);
+    }
 
     return {
-      size,
-      floors,
-      cellSize,
-      wallHeight: LevelGenerator.WALL_HEIGHT,
-      floorHeight: LevelGenerator.FLOOR_HEIGHT,
-      start,
-      goal,
-      connections: this.connections,
-      rooms: this.rooms,
+      nodes: path,
+      start: path[0],
+      goal: path[path.length - 1],
       seed: actualSeed,
-      cellCenter,
-      roomKey: LevelGenerator.roomKey,
+      floorHeight: LevelGenerator.FLOOR_HEIGHT,
+      wallHeight: LevelGenerator.WALL_HEIGHT,
+      cellSize: LevelGenerator.CELL_SIZE,
     };
   }
 
-  private isConnected(a: Cell, b: Cell): boolean {
-    return this.connections.has(LevelGenerator.connectionKey(a, b));
-  }
+  // ================= 1. ЛИНЕЙНЫЙ ПУТЬ =================
 
-  private carveFloor(size: number, floor: number): void {
-    const visited: boolean[][] = [];
-    for (let i = 0; i < size; i++) visited.push(new Array(size).fill(false));
+  private generateLinearPath(): PathNode[] {
+    const path: PathNode[] = [];
+    const visited = new Set<string>();
+    const target = LevelGenerator.PATH_LENGTH;
+    const floors = LevelGenerator.FLOORS;
 
-    const start: Cell = { i: 0, j: 0, floor };
-    const stack: Cell[] = [start];
-    visited[0][0] = true;
+    // Распределяем горизонтальные шаги по этажам равномерно
+    const totalUps = floors - 1;
+    const horizontalTotal = target - totalUps - 1; // -1 на стартовую комнату
+    const perFloor = Math.floor(horizontalTotal / floors);
+    const extra = horizontalTotal - perFloor * floors;
 
-    const dirs: Array<[number, number]> = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ];
+    const startCell: Cell = { i: 0, j: 0, floor: 0 };
+    const startNode: PathNode = {
+      cell: startCell,
+      prevDir: null,
+      nextDir: null,
+      doors: { n: false, s: false, w: false, e: false, up: false, down: false },
+      type: "entrance",
+      template: ROOM_TEMPLATES.entrance,
+      centerX: 0,
+      centerZ: 0,
+      sizeX: 0,
+      sizeZ: 0,
+      isStart: true,
+      isGoal: false,
+    };
+    path.push(startNode);
+    visited.add(this.cellKey(startCell));
 
-    while (stack.length > 0) {
-      const cur = stack[stack.length - 1];
-      const neigh: Cell[] = [];
-      for (const [di, dj] of dirs) {
-        const ni = cur.i + di;
-        const nj = cur.j + dj;
-        if (ni < 0 || nj < 0 || ni >= size || nj >= size) continue;
-        if (visited[ni][nj]) continue;
-        neigh.push({ i: ni, j: nj, floor });
-      }
-      if (neigh.length === 0) {
-        stack.pop();
-        continue;
-      }
-      const next = neigh[Math.floor(this.rng() * neigh.length)];
-      visited[next.i][next.j] = true;
-      this.connections.add(LevelGenerator.connectionKey(cur, next));
-      stack.push(next);
-    }
-  }
-
-  private placeStairs(size: number, floors: number): void {
-    for (let f = 0; f < floors - 1; f++) {
-      const candidates: Cell[] = [];
-      for (let i = 0; i < size; i++) {
-        for (let j = 0; j < size; j++) {
-          candidates.push({ i, j, floor: f });
-        }
-      }
-      for (let k = candidates.length - 1; k > 0; k--) {
-        const r = Math.floor(this.rng() * (k + 1));
-        [candidates[k], candidates[r]] = [candidates[r], candidates[k]];
-      }
-      const count = 1 + (this.rng() > 0.5 ? 1 : 0);
-      for (let n = 0; n < count && n < candidates.length; n++) {
-        const lower = candidates[n];
-        const upper: Cell = { i: lower.i, j: lower.j, floor: f + 1 };
-        this.connections.add(LevelGenerator.connectionKey(lower, upper));
-      }
-    }
-  }
-
-  private assignRoomTypes(size: number, floors: number, goal: Cell): void {
-    const stairCells = new Set<string>();
-    for (const key of this.connections) {
-      const [a, b] = key.split("|");
-      const [fa, ia, ja] = a.split(",").map(Number);
-      const [fb, ib, jb] = b.split(",").map(Number);
-      if (fa !== fb) {
-        stairCells.add(`${fa},${ia},${ja}`);
-        stairCells.add(`${fb},${ib},${jb}`);
-      }
-    }
+    let cur = startNode;
 
     for (let f = 0; f < floors; f++) {
-      for (let i = 0; i < size; i++) {
-        for (let j = 0; j < size; j++) {
-          const cell: Cell = { i, j, floor: f };
-          const key = LevelGenerator.roomKey(cell);
-          const isGoal = cell.floor === goal.floor && cell.i === goal.i && cell.j === goal.j;
-          const isStair = stairCells.has(key);
+      const horizOnFloor = perFloor + (f < extra ? 1 : 0);
 
-          let type: RoomType;
-          let template: RoomTemplate;
-          if (isGoal) {
-            type = "hall";
-            template = drillHallTemplate;
-          } else if (isStair) {
-            type = "stair";
-            template = ROOM_TEMPLATES.stair;
-          } else {
-            type = pickRandomType(this.rng);
-            template = ROOM_TEMPLATES[type];
-          }
-
-          this.rooms.set(key, {
-            cell,
-            type,
-            template,
-            isDrillRoom: isGoal,
-          });
+      // Горизонтальные шаги на этом этаже
+      for (let h = 0; h < horizOnFloor; h++) {
+        const options: Array<{ dir: "n" | "s" | "w" | "e"; cell: Cell }> = [];
+        const dirs: Array<{ dir: "n" | "s" | "w" | "e"; di: number; dj: number }> = [
+          { dir: "n", di: 0, dj: -1 },
+          { dir: "s", di: 0, dj: 1 },
+          { dir: "w", di: -1, dj: 0 },
+          { dir: "e", di: 1, dj: 0 },
+        ];
+        for (const d of dirs) {
+          const ni = cur.cell.i + d.di;
+          const nj = cur.cell.j + d.dj;
+          if (ni < 0 || nj < 0 || ni >= this.gridW || nj >= this.gridD) continue;
+          const cand: Cell = { i: ni, j: nj, floor: f };
+          if (visited.has(this.cellKey(cand))) continue;
+          options.push({ dir: d.dir, cell: cand });
         }
+        if (options.length === 0) break;
+
+        const chosen = options[Math.floor(this.rng() * options.length)];
+        cur.nextDir = chosen.dir;
+
+        const node: PathNode = {
+          cell: chosen.cell,
+          prevDir: this.oppositeDir(chosen.dir),
+          nextDir: null,
+          doors: { n: false, s: false, w: false, e: false, up: false, down: false },
+          type: "corridor",
+          template: ROOM_TEMPLATES.corridor,
+          centerX: 0,
+          centerZ: 0,
+          sizeX: 0,
+          sizeZ: 0,
+          isStart: false,
+          isGoal: false,
+        };
+        path.push(node);
+        visited.add(this.cellKey(chosen.cell));
+        cur = node;
+      }
+
+      // UP на следующий этаж (кроме последнего этажа)
+      if (f < floors - 1) {
+        const upCell: Cell = { i: cur.cell.i, j: cur.cell.j, floor: f + 1 };
+        if (!visited.has(this.cellKey(upCell))) {
+          cur.nextDir = "up";
+          const node: PathNode = {
+            cell: upCell,
+            prevDir: "up",
+            nextDir: null,
+            doors: { n: false, s: false, w: false, e: false, up: false, down: false },
+            type: "stair",
+            template: ROOM_TEMPLATES.stair,
+            centerX: 0,
+            centerZ: 0,
+            sizeX: 0,
+            sizeZ: 0,
+            isStart: false,
+            isGoal: false,
+          };
+          path.push(node);
+          visited.add(this.cellKey(upCell));
+          cur = node;
+        }
+      }
+    }
+
+    return path;
+  }
+
+  private oppositeDir(d: PathNode["nextDir"]): PathNode["prevDir"] {
+    if (d === "n") return "s";
+    if (d === "s") return "n";
+    if (d === "e") return "w";
+    if (d === "w") return "e";
+    if (d === "up") return "up";
+    return null;
+  }
+
+  private cellKey(c: Cell): string {
+    return `${c.floor},${c.i},${c.j}`;
+  }
+
+  // ================= 2. ТИПЫ И ДВЕРИ =================
+
+  private assignTypesAndDoors(path: PathNode[]): void {
+    for (let idx = 0; idx < path.length; idx++) {
+      const node = path[idx];
+
+      node.doors = {
+        n: node.prevDir === "n" || node.nextDir === "n",
+        s: node.prevDir === "s" || node.nextDir === "s",
+        w: node.prevDir === "w" || node.nextDir === "w",
+        e: node.prevDir === "e" || node.nextDir === "e",
+        up: node.nextDir === "up",
+        down: node.prevDir === "up",
+      };
+
+      if (idx === 0) {
+        node.type = "entrance";
+      } else if (idx === path.length - 1) {
+        node.type = "drill";
+      } else if (node.doors.up || node.doors.down) {
+        node.type = "stair";
+      } else {
+        node.type = pickRandomType(this.rng);
+      }
+
+      node.template = ROOM_TEMPLATES[node.type];
+      node.isStart = idx === 0;
+      node.isGoal = idx === path.length - 1;
+    }
+  }
+
+  // ================= 3. РАЗМЕРЫ И ПОЗИЦИИ =================
+
+  private layoutPath(path: PathNode[]): void {
+    // --- Размеры ---
+    for (const node of path) {
+      // Направление движения через комнату
+      const entersFromNS = node.prevDir === "n" || node.prevDir === "s";
+      const entersFromWE = node.prevDir === "w" || node.prevDir === "e";
+      const exitsToNS = node.nextDir === "n" || node.nextDir === "s";
+      const exitsToWE = node.nextDir === "w" || node.nextDir === "e";
+
+      // Базовая вариативная ширина (перпендикуляр к движению)
+      const variableWidth = 9 + this.rng() * 7; // 9..16
+
+      let sizeX: number;
+      let sizeZ: number;
+
+      if (node.isStart || node.isGoal || node.doors.up || node.doors.down) {
+        // Старт, финал и лестничные — квадратные, побольше
+        const big = node.isGoal ? 20 : node.isStart ? 16 : 14;
+        sizeX = big;
+        sizeZ = big;
+      } else if (entersFromNS && exitsToNS) {
+        // Прямой проход по Z: Z фиксирован, X варьируется
+        sizeX = variableWidth;
+        sizeZ = LevelGenerator.CELL_SIZE;
+      } else if (entersFromWE && exitsToWE) {
+        // Прямой проход по X: X фиксирован, Z варьируется
+        sizeX = LevelGenerator.CELL_SIZE;
+        sizeZ = variableWidth;
+      } else if (entersFromNS && exitsToWE) {
+        // Поворот N→E: квадратная, вариативная
+        sizeX = variableWidth;
+        sizeZ = variableWidth;
+      } else if (entersFromWE && exitsToNS) {
+        // Поворот W→N: квадратная, вариативная
+        sizeX = variableWidth;
+        sizeZ = variableWidth;
+      } else {
+        // Тупик или иное — квадратная
+        sizeX = variableWidth;
+        sizeZ = variableWidth;
+      }
+
+      node.sizeX = sizeX;
+      node.sizeZ = sizeZ;
+    }
+
+    // --- Позиции ---
+    for (let idx = 0; idx < path.length; idx++) {
+      const node = path[idx];
+
+      if (idx === 0) {
+        node.centerX = 0;
+        node.centerZ = 0;
+        continue;
+      }
+
+      const prev = path[idx - 1];
+      const dir = node.prevDir;
+
+      switch (dir) {
+        case "n": {
+          // Предыдущая комната к северу → мы размещаемся южнее
+          const d = prev.sizeZ / 2 + node.sizeZ / 2;
+          node.centerX = prev.centerX;
+          node.centerZ = prev.centerZ + d;
+          break;
+        }
+        case "s": {
+          // Предыдущая к югу → мы севернее
+          const d = prev.sizeZ / 2 + node.sizeZ / 2;
+          node.centerX = prev.centerX;
+          node.centerZ = prev.centerZ - d;
+          break;
+        }
+        case "e": {
+          // Предыдущая к востоку → мы западнее
+          const d = prev.sizeX / 2 + node.sizeX / 2;
+          node.centerZ = prev.centerZ;
+          node.centerX = prev.centerX - d;
+          break;
+        }
+        case "w": {
+          // Предыдущая к западу → мы восточнее
+          const d = prev.sizeX / 2 + node.sizeX / 2;
+          node.centerZ = prev.centerZ;
+          node.centerX = prev.centerX + d;
+          break;
+        }
+        case "up": {
+          node.centerX = prev.centerX;
+          node.centerZ = prev.centerZ;
+          break;
+        }
+        default:
+          node.centerX = prev.centerX;
+          node.centerZ = prev.centerZ;
       }
     }
   }
 
-  private ensureReachable(start: Cell, goal: Cell, size: number, floors: number): void {
-    const visited = new Set<string>();
-    const queue: Cell[] = [start];
-    visited.add(LevelGenerator.roomKey(start));
+  // ================= 4. ГЕОМЕТРИЯ =================
 
-    const dirs: Array<[number, number, number]> = [
-      [1, 0, 0],
-      [-1, 0, 0],
-      [0, 1, 0],
-      [0, -1, 0],
-      [0, 0, 1],
-      [0, 0, -1],
-    ];
+  private buildRoom(scene: Scene, node: PathNode, mats: RoomMaterials): void {
+    const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+    const wallH = LevelGenerator.WALL_HEIGHT;
+    const wallT = 0.5;
+    const cx = node.centerX;
+    const cz = node.centerZ;
+    const sx = node.sizeX;
+    const sz = node.sizeZ;
 
-    while (queue.length > 0) {
-      const cur = queue.shift()!;
-      for (const [di, dj, df] of dirs) {
-        const next: Cell = { i: cur.i + di, j: cur.j + dj, floor: cur.floor + df };
-        if (next.i < 0 || next.j < 0 || next.i >= size || next.j >= size) continue;
-        if (next.floor < 0 || next.floor >= floors) continue;
-        if (!this.isConnected(cur, next)) continue;
-        const k = LevelGenerator.roomKey(next);
-        if (visited.has(k)) continue;
-        visited.add(k);
-        queue.push(next);
-      }
+    // --- Пол ---
+    if (node.isGoal) {
+      // Особый пол-обод строится в buildDrillPit
+    } else if (node.doors.down) {
+      this.buildFloorWithHole(scene, mats, cx, cz, floorY, sx, sz);
+    } else {
+      const f = MeshBuilder.CreateBox("floor",
+        { width: sx, height: 0.2, depth: sz }, scene);
+      f.position.set(cx, floorY - 0.1, cz);
+      f.material = mats.sand;
+      f.checkCollisions = true;
+      f.isPickable = false;
     }
 
-    if (!visited.has(LevelGenerator.roomKey(goal))) {
-      for (let f = 0; f < floors - 1; f++) {
-        const a: Cell = { i: goal.i, j: goal.j, floor: f };
-        const b: Cell = { i: goal.i, j: goal.j, floor: f + 1 };
-        this.connections.add(LevelGenerator.connectionKey(a, b));
-        const ka = LevelGenerator.roomKey(a);
-        const kb = LevelGenerator.roomKey(b);
-        if (this.rooms.has(ka)) {
-          const r = this.rooms.get(ka)!;
-          this.rooms.set(ka, { ...r, type: "stair", template: ROOM_TEMPLATES.stair });
-        }
-        if (this.rooms.has(kb)) {
-          const r = this.rooms.get(kb)!;
-          this.rooms.set(kb, { ...r, type: "stair", template: ROOM_TEMPLATES.stair });
-        }
-      }
+    // --- Потолок ---
+    const ceilY = floorY + wallH + 0.1;
+    if (node.doors.up) {
+      this.buildCeilingWithHole(scene, mats, cx, cz, ceilY, sx, sz);
+    } else if (!node.isGoal) {
+      const c = MeshBuilder.CreateBox("ceil",
+        { width: sx, height: 0.2, depth: sz }, scene);
+      c.position.set(cx, ceilY, cz);
+      c.material = mats.darkStone;
+      c.checkCollisions = true;
+      c.isPickable = false;
+    }
+
+    // --- Стены ---
+    const fullWallH = LevelGenerator.FLOOR_HEIGHT;
+    this.buildWall(scene, mats.stone, cx, cz - sz / 2, floorY, sx, wallT, "x", node.doors.n, fullWallH);
+    this.buildWall(scene, mats.stone, cx, cz + sz / 2, floorY, sx, wallT, "x", node.doors.s, fullWallH);
+    this.buildWall(scene, mats.stone, cx - sx / 2, cz, floorY, sz, wallT, "z", node.doors.w, fullWallH);
+    this.buildWall(scene, mats.stone, cx + sx / 2, cz, floorY, sz, wallT, "z", node.doors.e, fullWallH);
+
+    // --- Декор ---
+    node.template.buildDecor(scene, new Vector3(cx, 0, cz), Math.min(sx, sz), floorY, mats, node.doors);
+
+    // --- Рампа вверх ---
+    if (node.doors.up) {
+      this.buildRampUp(scene, mats, cx, cz, floorY);
+    }
+
+    // --- Финальная комната ---
+    if (node.isGoal) {
+      this.buildDrillPit(scene, mats, cx, cz, floorY, sx, sz);
     }
   }
+
+  private buildWall(
+    scene: Scene,
+    material: StandardMaterial,
+    centerX: number,
+    centerZ: number,
+    floorY: number,
+    wallLength: number,
+    thickness: number,
+    axis: "x" | "z",
+    hasDoor: boolean,
+    height: number
+  ): void {
+    const doorWidth = 3.6;
+    const doorHeight = 3.4;
+
+    const dims = (len: number, h: number): [number, number, number] =>
+      axis === "x" ? [len, h, thickness] : [thickness, h, len];
+
+    const addBox = (len: number, h: number, offset: number, y: number): Mesh => {
+      const [w, hh, d] = dims(len, h);
+      const box = MeshBuilder.CreateBox("wall", { width: w, height: hh, depth: d }, scene);
+      if (axis === "x") box.position.set(centerX + offset, floorY + y, centerZ);
+      else box.position.set(centerX, floorY + y, centerZ + offset);
+      box.material = material;
+      box.checkCollisions = true;
+      box.isPickable = false;
+      return box;
+    };
+
+    if (!hasDoor) {
+      addBox(wallLength, height, 0, height / 2);
+      return;
+    }
+
+    const sideWidth = Math.max(0.5, (wallLength - doorWidth) / 2);
+    const offset = doorWidth / 2 + sideWidth / 2;
+    addBox(sideWidth, height, -offset, height / 2);
+    addBox(sideWidth, height, offset, height / 2);
+    addBox(doorWidth, height - doorHeight, 0, doorHeight + (height - doorHeight) / 2);
+  }
+
+  /** Пол с дырой по центру-северу (для рампы снизу). */
+  private buildFloorWithHole(
+    scene: Scene,
+    mats: RoomMaterials,
+    cx: number,
+    cz: number,
+    floorY: number,
+    sx: number,
+    sz: number
+  ): void {
+    const holeCenterZ = cz + HOLE_Z_OFFSET;
+    const holeN = holeCenterZ - HOLE_HALF_Z;
+    const holeS = holeCenterZ + HOLE_HALF_Z;
+
+    const makeStrip = (w: number, d: number, x: number, z: number): void => {
+      const m = MeshBuilder.CreateBox("floorStrip",
+        { width: w, height: 0.2, depth: d }, scene);
+      m.position.set(x, floorY - 0.1, z);
+      m.material = mats.sand;
+      m.checkCollisions = true;
+      m.isPickable = false;
+    };
+
+    // Полоса севернее дыры
+    const nTop = cz - sz / 2;
+    if (holeN > nTop + 0.1) {
+      makeStrip(sx, holeN - nTop, cx, (nTop + holeN) / 2);
+    }
+    // Полоса южнее дыры
+    const sBottom = cz + sz / 2;
+    if (sBottom > holeS + 0.1) {
+      makeStrip(sx, sBottom - holeS, cx, (holeS + sBottom) / 2);
+    }
+    // Полоса западнее дыры
+    const wLeft = cx - sx / 2;
+    if (cx - HOLE_HALF_X > wLeft + 0.1) {
+      makeStrip(cx - HOLE_HALF_X - wLeft, HOLE_HALF_Z * 2,
+        (wLeft + cx - HOLE_HALF_X) / 2, holeCenterZ);
+    }
+    // Полоса восточнее дыры
+    const eRight = cx + sx / 2;
+    if (eRight > cx + HOLE_HALF_X + 0.1) {
+      makeStrip(eRight - cx - HOLE_HALF_X, HOLE_HALF_Z * 2,
+        (cx + HOLE_HALF_X + eRight) / 2, holeCenterZ);
+    }
+  }
+
+  /** Потолок с дырой в том же месте, где рампа наверх. */
+  private buildCeilingWithHole(
+    scene: Scene,
+    mats: RoomMaterials,
+    cx: number,
+    cz: number,
+    ceilY: number,
+    sx: number,
+    sz: number
+  ): void {
+    const holeCenterZ = cz + HOLE_Z_OFFSET;
+    const holeN = holeCenterZ - HOLE_HALF_Z;
+    const holeS = holeCenterZ + HOLE_HALF_Z;
+
+    const makeStrip = (w: number, d: number, x: number, z: number): void => {
+      const m = MeshBuilder.CreateBox("ceilStrip",
+        { width: w, height: 0.2, depth: d }, scene);
+      m.position.set(x, ceilY, z);
+      m.material = mats.darkStone;
+      m.checkCollisions = true;
+      m.isPickable = false;
+    };
+
+    const nTop = cz - sz / 2;
+    if (holeN > nTop + 0.1) {
+      makeStrip(sx, holeN - nTop, cx, (nTop + holeN) / 2);
+    }
+    const sBottom = cz + sz / 2;
+    if (sBottom > holeS + 0.1) {
+      makeStrip(sx, sBottom - holeS, cx, (holeS + sBottom) / 2);
+    }
+    const wLeft = cx - sx / 2;
+    if (cx - HOLE_HALF_X > wLeft + 0.1) {
+      makeStrip(cx - HOLE_HALF_X - wLeft, HOLE_HALF_Z * 2,
+        (wLeft + cx - HOLE_HALF_X) / 2, holeCenterZ);
+    }
+    const eRight = cx + sx / 2;
+    if (eRight > cx + HOLE_HALF_X + 0.1) {
+      makeStrip(eRight - cx - HOLE_HALF_X, HOLE_HALF_Z * 2,
+        (cx + HOLE_HALF_X + eRight) / 2, holeCenterZ);
+    }
+  }
+
+  /** Рампа от юга (низ) к северу (верх). Верх точно под дырой в потолке. */
+  private buildRampUp(
+    scene: Scene,
+    mats: RoomMaterials,
+    cx: number,
+    cz: number,
+    floorY: number
+  ): void {
+    const len = Math.sqrt(RAMP_RUN * RAMP_RUN + RAMP_RISE * RAMP_RISE);
+    const angle = Math.atan2(RAMP_RISE, RAMP_RUN);
+    const rampCenterZ = cz + HOLE_Z_OFFSET; // центр рампы совпадает с центром дыры
+
+    const ramp = MeshBuilder.CreateBox("ramp",
+      { width: 4.0, height: 0.4, depth: len }, scene);
+    ramp.position.set(cx, floorY + RAMP_RISE / 2, rampCenterZ);
+    ramp.rotation.x = angle; // +X-ось: -Z конец идёт вверх
+    ramp.material = mats.darkStone;
+    ramp.checkCollisions = true;
+    ramp.isPickable = false;
+  }
+
+  /** Финальная комната: открытый верх, синий свет, яма с буром и спуском. */
+  private buildDrillPit(
+    scene: Scene,
+    mats: RoomMaterials,
+    cx: number,
+    cz: number,
+    floorY: number,
+    sx: number,
+    sz: number
+  ): void {
+    const minSize = Math.min(sx, sz);
+    const pitTopSize = minSize * 0.55;    // обод = 22.5% комнаты с каждой стороны
+    const pitBottomSize = minSize * 0.3;
+    const pitDepth = 2.5;
+    const rimWidth = (minSize - pitTopSize) / 2;
+
+    // --- Обод пола вокруг ямы ---
+    const mkRim = (w: number, d: number, x: number, z: number): void => {
+      const b = MeshBuilder.CreateBox("pitRim",
+        { width: w, height: 0.2, depth: d }, scene);
+      b.position.set(x, floorY - 0.1, z);
+      b.material = mats.sand;
+      b.checkCollisions = true;
+      b.isPickable = false;
+    };
+    mkRim(sx, rimWidth, cx, cz - pitTopSize / 2 - rimWidth / 2);
+    mkRim(sx, rimWidth, cx, cz + pitTopSize / 2 + rimWidth / 2);
+    mkRim(rimWidth, pitTopSize, cx - pitTopSize / 2 - rimWidth / 2, cz);
+    mkRim(rimWidth, pitTopSize, cx + pitTopSize / 2 + rimWidth / 2, cz);
+
+    // --- Стенки ямы (усечённая пирамида) ---
+    const pit = MeshBuilder.CreateCylinder("drillPit", {
+      height: pitDepth,
+      diameterTop: pitTopSize,
+      diameterBottom: pitBottomSize,
+      tessellation: 4,
+    }, scene);
+    pit.position.set(cx, floorY - pitDepth / 2, cz);
+    pit.rotation.y = Math.PI / 4;
+
+    const pitMat = mats.stone.clone("drillPitMat");
+    pitMat.backFaceCulling = false;
+    pit.material = pitMat;
+    pit.checkCollisions = true;
+    pit.isPickable = false;
+
+    // --- Дно ямы ---
+    const pitFloor = MeshBuilder.CreateBox("drillPitFloor",
+      { width: pitBottomSize, height: 0.3, depth: pitBottomSize }, scene);
+    pitFloor.position.set(cx, floorY - pitDepth - 0.15, cz);
+    pitFloor.material = mats.darkStone;
+    pitFloor.checkCollisions = true;
+    pitFloor.isPickable = false;
+
+    // --- Рампа вдоль западной стенки ямы ---
+    const rimEdgeX = cx - pitTopSize / 2 + 0.6;
+    const bottomEdgeX = cx - pitBottomSize / 2 + 0.6;
+    const rampRun = Math.abs(rimEdgeX - bottomEdgeX);
+    const rampLen = Math.sqrt(rampRun * rampRun + pitDepth * pitDepth);
+    const rampAngle = Math.atan2(pitDepth, rampRun);
+
+    const ramp = MeshBuilder.CreateBox("drillRamp",
+      { width: rampLen, height: 0.4, depth: 3.5 }, scene);
+    ramp.position.set((rimEdgeX + bottomEdgeX) / 2, floorY - pitDepth / 2, cz);
+    // Знак rotation.z: чтобы запад (rimEdge) был выше востока (bottomEdge)
+    ramp.rotation.z = -rampAngle;
+    ramp.material = mats.darkStone;
+    ramp.checkCollisions = true;
+    ramp.isPickable = false;
+
+    // --- Синий лунный свет ---
+    const moon = new DirectionalLight("drillMoon",
+      new Vector3(0.2, -1, 0.15), scene);
+    moon.position.set(cx + 5, floorY + 20, cz + 5);
+    moon.intensity = 1.2;
+    moon.diffuse = new Color3(0.55, 0.7, 1.0);
+    moon.specular = new Color3(0.3, 0.4, 0.6);
+
+    const fill = new HemisphericLight("drillFill",
+      new Vector3(0, 1, 0), scene);
+    fill.intensity = 0.35;
+    fill.diffuse = new Color3(0.5, 0.6, 0.85);
+    fill.groundColor = new Color3(0.05, 0.07, 0.12);
+  }
+
+  // ================= МАТЕРИАЛЫ =================
 
   private createMaterials(scene: Scene): RoomMaterials {
-    const stone = new StandardMaterial("pyrStone", scene);
-    stone.diffuseColor = new Color3(0.55, 0.48, 0.35);
+    const stone = new StandardMaterial("stone", scene);
+    stone.diffuseColor = new Color3(0.55, 0.46, 0.33);
     stone.specularColor = new Color3(0.04, 0.04, 0.04);
-    stone.ambientColor = new Color3(0.12, 0.1, 0.07);
+    stone.ambientColor = new Color3(0.25, 0.2, 0.13);
 
     const tex = new DynamicTexture("stoneTex", { width: 256, height: 256 }, scene, false);
     const ctx = tex.getContext();
-    ctx.fillStyle = "#8a7a5c";
+    ctx.fillStyle = "#7a6a4c";
     ctx.fillRect(0, 0, 256, 256);
-    ctx.strokeStyle = "#5c4e38";
+    ctx.strokeStyle = "#4c3e28";
     ctx.lineWidth = 3;
     for (let y = 0; y < 256; y += 32) {
       ctx.beginPath();
@@ -308,344 +682,25 @@ export class LevelGenerator {
     tex.update();
     stone.diffuseTexture = tex;
 
-    const darkStone = new StandardMaterial("pyrDark", scene);
-    darkStone.diffuseColor = new Color3(0.28, 0.24, 0.18);
+    const darkStone = new StandardMaterial("darkStone", scene);
+    darkStone.diffuseColor = new Color3(0.3, 0.24, 0.18);
     darkStone.specularColor = new Color3(0.03, 0.03, 0.03);
+    darkStone.ambientColor = new Color3(0.15, 0.12, 0.08);
 
-    const sand = new StandardMaterial("pyrSand", scene);
-    sand.diffuseColor = new Color3(0.42, 0.36, 0.26);
+    const sand = new StandardMaterial("sand", scene);
+    sand.diffuseColor = new Color3(0.85, 0.7, 0.45);
     sand.specularColor = Color3.Black();
+    sand.emissiveColor = new Color3(0.18, 0.14, 0.09);
+    sand.ambientColor = new Color3(0.5, 0.4, 0.25);
 
-    const metal = new StandardMaterial("pyrMetal", scene);
+    const metal = new StandardMaterial("metal", scene);
     metal.diffuseColor = new Color3(0.4, 0.42, 0.45);
     metal.specularColor = new Color3(0.2, 0.2, 0.2);
 
-    const wood = new StandardMaterial("pyrWood", scene);
+    const wood = new StandardMaterial("wood", scene);
     wood.diffuseColor = new Color3(0.32, 0.22, 0.12);
     wood.specularColor = new Color3(0.05, 0.05, 0.05);
 
     return { stone, darkStone, sand, metal, wood };
-  }
-
-  private buildGeometry(
-    scene: Scene,
-    size: number,
-    floors: number,
-    cellSize: number,
-    mats: RoomMaterials
-  ): void {
-    for (let f = 0; f < floors; f++) {
-      this.buildFloorLevel(scene, size, f, cellSize, mats);
-    }
-  }
-
-  private buildFloorLevel(
-    scene: Scene,
-    size: number,
-    floor: number,
-    cellSize: number,
-    mats: RoomMaterials
-  ): void {
-    const baseY = floor * LevelGenerator.FLOOR_HEIGHT;
-
-    for (let i = 0; i < size; i++) {
-      for (let j = 0; j < size; j++) {
-        const cell: Cell = { i, j, floor };
-        const room = this.rooms.get(LevelGenerator.roomKey(cell))!;
-        const floorY = baseY;
-        const cx = i * cellSize;
-        const cz = j * cellSize;
-        const roomW = cellSize;
-        const roomHalf = roomW / 2;
-
-        // Если это комната с буром — генерируем её особой функцией и пропускаем стандартную
-        if (room.isDrillRoom) {
-          // Стены с дверьми строим как обычно (нужны двери от соседей)
-          const northDoor = j > 0 && this.isConnected(cell, { i, j: j - 1, floor });
-          const southDoor = j < size - 1 && this.isConnected(cell, { i, j: j + 1, floor });
-          const westDoor  = i > 0 && this.isConnected(cell, { i: i - 1, j, floor });
-          const eastDoor  = i < size - 1 && this.isConnected(cell, { i: i + 1, j, floor });
-
-          if (j === 0 || !northDoor) this.createWall(scene, mats.stone, cx, cz - roomHalf, floorY, "x", false);
-          if (j === size - 1 || !southDoor) this.createWall(scene, mats.stone, cx, cz + roomHalf, floorY, "x", false);
-          if (i === 0 || !westDoor)  this.createWall(scene, mats.stone, cx - roomHalf, cz, floorY, "z", false);
-          if (i === size - 1 || !eastDoor) this.createWall(scene, mats.stone, cx + roomHalf, cz, floorY, "z", false);
-
-          this.buildDrillRoom(scene, cx, cz, floorY, roomW, mats);
-          continue; // Пропускаем стандартный пол/потолок/декор
-        }
-
-        // --- ПОЛ ---
-        const isStairRoom = room.type === "stair";
-        const hasLower = this.isConnected(cell, { i, j, floor: floor - 1 });
-        const needFloorHole = isStairRoom && hasLower;
-
-        if (needFloorHole) {
-          // Пол-рамка с дыркой по центру (для лестничной комнаты сверху)
-          const holeHalf = 1.8;
-          const sideW = roomHalf - holeHalf;
-
-          const mkFloorStrip = (w: number, d: number, x: number, z: number) => {
-            const b = MeshBuilder.CreateBox("floorStrip",
-              { width: w, height: 0.2, depth: d }, scene);
-            b.position.set(x, floorY - 0.1, z);
-            b.material = mats.sand;
-            b.checkCollisions = true;
-            b.isPickable = false;
-          };
-          mkFloorStrip(roomW, sideW, cx, cz - holeHalf - sideW / 2);
-          mkFloorStrip(roomW, sideW, cx, cz + holeHalf + sideW / 2);
-          mkFloorStrip(sideW, holeHalf * 2, cx - holeHalf - sideW / 2, cz);
-          mkFloorStrip(sideW, holeHalf * 2, cx + holeHalf + sideW / 2, cz);
-        } else {
-          // Обычный цельный пол
-          const floorMesh = MeshBuilder.CreateBox(
-            `floor_${floor}_${i}_${j}`,
-            { width: roomW, height: 0.2, depth: roomW },
-            scene
-          );
-          floorMesh.position.set(cx, floorY - 0.1, cz);
-          floorMesh.material = mats.sand;
-          floorMesh.checkCollisions = true;
-          floorMesh.isPickable = false;
-        }
-
-        // --- ПОТОЛОК ---
-        const hasUpper = this.isConnected(cell, { i, j, floor: floor + 1 });
-        const needCeilHole = isStairRoom && hasUpper;
-
-        if (needCeilHole) {
-          // Потолок-рамка с дыркой (для лестничной комнаты снизу)
-          const holeHalf = 1.8;
-          const sideW = roomHalf - holeHalf;
-          const ceilY = floorY + LevelGenerator.WALL_HEIGHT + 0.1;
-
-          const mkCeilStrip = (w: number, d: number, x: number, z: number) => {
-            const b = MeshBuilder.CreateBox("ceilStrip",
-              { width: w, height: 0.2, depth: d }, scene);
-            b.position.set(x, ceilY, z);
-            b.material = mats.darkStone;
-            b.checkCollisions = true;
-            b.isPickable = false;
-          };
-          mkCeilStrip(roomW, sideW, cx, cz - holeHalf - sideW / 2);
-          mkCeilStrip(roomW, sideW, cx, cz + holeHalf + sideW / 2);
-          mkCeilStrip(sideW, holeHalf * 2, cx - holeHalf - sideW / 2, cz);
-          mkCeilStrip(sideW, holeHalf * 2, cx + holeHalf + sideW / 2, cz);
-        } else {
-          // Обычный цельный потолок
-          const ceil = MeshBuilder.CreateBox(
-            `ceil_${floor}_${i}_${j}`,
-            { width: roomW, height: 0.2, depth: roomW },
-            scene
-          );
-          ceil.position.set(cx, floorY + LevelGenerator.WALL_HEIGHT + 0.1, cz);
-          ceil.material = mats.darkStone;
-          ceil.checkCollisions = true;
-          ceil.isPickable = false;
-        }
-
-        let northDoor = j > 0 && this.isConnected(cell, { i, j: j - 1, floor });
-        let southDoor = j < size - 1 && this.isConnected(cell, { i, j: j + 1, floor });
-        let westDoor = i > 0 && this.isConnected(cell, { i: i - 1, j, floor });
-        let eastDoor = i < size - 1 && this.isConnected(cell, { i: i + 1, j, floor });
-
-        // Для лестничной комнаты оставляем ровно один боковой выход
-        if (isStairRoom) {
-          let kept = false;
-          northDoor = northDoor && !kept ? (kept = true) : false;
-          southDoor = southDoor && !kept ? (kept = true) : false;
-          westDoor  = westDoor  && !kept ? (kept = true) : false;
-          eastDoor  = eastDoor  && !kept ? (kept = true) : false;
-        }
-
-        if (j === 0 || !northDoor) this.createWall(scene, mats.stone, cx, cz - roomHalf, floorY, "x", false);
-        else this.createWall(scene, mats.stone, cx, cz - roomHalf, floorY, "x", true);
-
-        if (j === size - 1 || !southDoor) this.createWall(scene, mats.stone, cx, cz + roomHalf, floorY, "x", false);
-        else this.createWall(scene, mats.stone, cx, cz + roomHalf, floorY, "x", true);
-
-        if (i === 0 || !westDoor) this.createWall(scene, mats.stone, cx - roomHalf, cz, floorY, "z", false);
-        else this.createWall(scene, mats.stone, cx - roomHalf, cz, floorY, "z", true);
-
-        if (i === size - 1 || !eastDoor) this.createWall(scene, mats.stone, cx + roomHalf, cz, floorY, "z", false);
-        else this.createWall(scene, mats.stone, cx + roomHalf, cz, floorY, "z", true);
-
-        room.template.buildDecor(scene, new Vector3(cx, 0, cz), cellSize, floorY, mats);
-
-        if (room.type === "stair") {
-          const upperExists = this.isConnected(cell, { i, j, floor: floor + 1 });
-          if (upperExists) {
-            this.buildRamp(scene, cx, cz, floorY, LevelGenerator.FLOOR_HEIGHT, mats.stone, true);
-          }
-        }
-      }
-    }
-  }
-
-  private createWall(
-    scene: Scene,
-    material: StandardMaterial,
-    centerX: number,
-    centerZ: number,
-    floorY: number,
-    axis: "x" | "z",
-    hasDoor: boolean
-  ): void {
-    const length = LevelGenerator.CELL_SIZE;
-    const height = LevelGenerator.WALL_HEIGHT;
-    const thickness = 0.45;
-    const doorWidth = 3.4;
-    const doorHeight = 2.7;
-
-    const dims = (len: number, h: number): [number, number, number] =>
-      axis === "x" ? [len, h, thickness] : [thickness, h, len];
-
-    const addBox = (len: number, h: number, offsetAlong: number, y: number): Mesh => {
-      const [w, hh, d] = dims(len, h);
-      const box = MeshBuilder.CreateBox("wall", { width: w, height: hh, depth: d }, scene);
-      if (axis === "x") {
-        box.position.set(centerX + offsetAlong, floorY + y, centerZ);
-      } else {
-        box.position.set(centerX, floorY + y, centerZ + offsetAlong);
-      }
-      box.material = material;
-      box.checkCollisions = true;
-      box.isPickable = true;
-      return box;
-    };
-
-    if (!hasDoor) {
-      addBox(length, height, 0, height / 2);
-      return;
-    }
-
-    const sideWidth = (length - doorWidth) / 2;
-    const offset = doorWidth / 2 + sideWidth / 2;
-    addBox(sideWidth, height, -offset, height / 2);
-    addBox(sideWidth, height, offset, height / 2);
-    addBox(doorWidth, height - doorHeight, 0, doorHeight + (height - doorHeight) / 2);
-  }
-
-  /**
-   * Финальный зал: открытый верх, синий свет, усечённая пирамида вниз с буром на дне.
-   */
-  private buildDrillRoom(
-    scene: Scene,
-    cx: number,
-    cz: number,
-    floorY: number,
-    roomW: number,
-    mats: RoomMaterials
-  ): void {
-    const pitTopSize = roomW * 0.72;        // ~10 м при комнате 14
-    const pitBottomSize = roomW * 0.32;     // ~4.5 м
-    const rimWidth = (roomW - pitTopSize) / 2;
-    const pitDepth = 4.0;
-
-    // ---------- 1. Обод пола вокруг ямы (4 полосы) ----------
-    const mkRim = (w: number, d: number, x: number, z: number) => {
-      const b = MeshBuilder.CreateBox("drillRim",
-        { width: w, height: 0.2, depth: d }, scene);
-      b.position.set(x, floorY - 0.1, z);
-      b.material = mats.sand;
-      b.checkCollisions = true;
-      b.isPickable = false;
-    };
-    mkRim(roomW, rimWidth, cx, cz - pitTopSize / 2 - rimWidth / 2);
-    mkRim(roomW, rimWidth, cx, cz + pitTopSize / 2 + rimWidth / 2);
-    mkRim(rimWidth, pitTopSize, cx - pitTopSize / 2 - rimWidth / 2, cz);
-    mkRim(rimWidth, pitTopSize, cx + pitTopSize / 2 + rimWidth / 2, cz);
-
-    // ---------- 2. Стены ямы (усечённая пирамида) ----------
-    // CreateCylinder с tessellation=4 даёт квадрат; диаметры задают верх/низ.
-    const pit = MeshBuilder.CreateCylinder("drillPit", {
-      height: pitDepth,
-      diameterTop: pitTopSize,
-      diameterBottom: pitBottomSize,
-      tessellation: 4,
-      sideOrientation: Mesh.BACKSIDE, // видеть стенки изнутри
-    }, scene);
-    pit.position.set(cx, floorY - pitDepth / 2, cz);
-    pit.rotation.y = Math.PI / 4; // разворачиваем квадрат лицом к осям
-    pit.material = mats.stone;
-    pit.checkCollisions = true;
-    pit.isPickable = false;
-
-    // ---------- 3. Дно ямы ----------
-    const pitFloor = MeshBuilder.CreateBox("drillPitFloor",
-      { width: pitBottomSize, height: 0.3, depth: pitBottomSize }, scene);
-    pitFloor.position.set(cx, floorY - pitDepth - 0.15, cz);
-    pitFloor.material = mats.darkStone;
-    pitFloor.checkCollisions = true;
-    pitFloor.isPickable = false;
-
-    // ---------- 4. Рампа вдоль западной стенки ямы ----------
-    // Идёт от обода на западной стороне вниз к западному краю дна.
-    const rampStartX = cx - pitTopSize / 2 + 0.5; // край ямы (запад)
-    const rampEndX   = cx - pitBottomSize / 2 + 0.5;
-    const rampRun    = rampStartX - rampEndX;
-    const rampLen    = Math.sqrt(rampRun * rampRun + pitDepth * pitDepth);
-    const rampAngle  = Math.atan2(pitDepth, rampRun);
-
-    const ramp = MeshBuilder.CreateBox("drillRamp",
-      { width: rampLen, height: 0.3, depth: 2.5 }, scene);
-    ramp.position.set(
-      (rampStartX + rampEndX) / 2,
-      floorY - pitDepth / 2,
-      cz
-    );
-    // Наклоняем по X-оси: чем больше X, тем ниже — поэтому rotation.z положительный
-    ramp.rotation.z = rampAngle;
-    ramp.material = mats.darkStone;
-    ramp.checkCollisions = true;
-    ramp.isPickable = false;
-
-    // ---------- 5. Синий лунный свет сверху ----------
-    const moon = new DirectionalLight(
-      "drillMoon",
-      new Vector3(0.2, -1, 0.15),
-      scene
-    );
-    moon.position.set(cx + 5, floorY + 20, cz + 5);
-    moon.intensity = 1.1;
-    moon.diffuse = new Color3(0.55, 0.7, 1.0);   // холодный голубой
-    moon.specular = new Color3(0.3, 0.4, 0.6);
-
-    // Мягкий ambient внутри зала, чтобы стены не были чёрными
-    const fill = new HemisphericLight(
-      "drillFill",
-      new Vector3(0, 1, 0),
-      scene
-    );
-    fill.intensity = 0.25;
-    fill.diffuse = new Color3(0.4, 0.5, 0.75);
-    fill.groundColor = new Color3(0.05, 0.06, 0.1);
-  }
-
-  private buildRamp(
-    scene: Scene,
-    cx: number,
-    cz: number,
-    floorY: number,
-    rise: number,
-    mat: StandardMaterial,
-    upward: boolean
-  ): void {
-    const run = 4.5;
-    const len = Math.sqrt(run * run + rise * rise);
-    const angle = Math.atan2(rise, run);
-
-    const ramp = MeshBuilder.CreateBox("ramp",
-      { width: 3.2, height: 0.4, depth: len }, scene);
-    ramp.position.set(
-      cx,
-      floorY + rise / 2,
-      cz + (upward ? run / 2 : -run / 2)
-    );
-    ramp.rotation.x = upward ? -angle : angle;
-    ramp.material = mat;
-    ramp.checkCollisions = true;
-    ramp.isPickable = false;
   }
 }

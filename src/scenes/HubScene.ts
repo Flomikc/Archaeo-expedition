@@ -13,17 +13,22 @@ import {
 
 import { CameraItem } from "../entities/CameraItem";
 import { Player } from "../entities/Player";
+import { ArtifactSystem } from "../systems/ArtifactSystem";
 import { Atmosphere } from "../systems/Atmosphere";
 import { InteractionSystem } from "../systems/InteractionSystem";
+import { LaptopSystem } from "../systems/LaptopSystem";
 import { SaveSystem } from "../systems/SaveSystem";
+import { ShopSystem } from "../systems/ShopSystem";
+import { WorkbenchSystem } from "../systems/WorkbenchSystem";
+import { SHOP_ITEMS } from "../data/ShopData";
 import { HUD } from "../ui/HUD";
 
 export interface HubSceneOptions {
   engine: Engine;
   canvas: HTMLCanvasElement;
   hud: HUD;
+  /** Игрок выбрал локацию «Египет» в ноутбуке → отправляемся в пустыню. */
   onGoToDesert: () => void;
-  onGoToExpedition: () => void;
 }
 
 export class HubScene {
@@ -32,23 +37,39 @@ export class HubScene {
   private readonly options: HubSceneOptions;
   private readonly hud: HUD;
   private readonly canvas: HTMLCanvasElement;
+  private readonly engine: Engine;
+
   private readonly player: Player;
   private readonly interaction: InteractionSystem;
   private readonly atmosphere: Atmosphere;
-  private cameraItem: CameraItem | null = null;
+  private readonly laptopSystem: LaptopSystem;
+  private readonly workbench = new WorkbenchSystem();
 
-  private menuOpen = false;
+  private cameraItem: CameraItem | null = null;
+  private laptopOpen = false;
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
-    if (e.code !== "KeyE") return;
-    if (this.menuOpen) return;
-    this.interaction.interact();
+    // Пока открыт верстак — вообще ничего не делаем
+    if (this.workbench.isOpen()) return;
+
+    // Ноутбук
+    if (this.laptopOpen) {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        void this.closeLaptop();
+      }
+      return;
+    }
+
+    if (this.laptopSystem.isBusy) return;
+    if (e.code === "KeyE") this.interaction.interact();
   };
 
   constructor(options: HubSceneOptions) {
     this.options = options;
     this.hud = options.hud;
     this.canvas = options.canvas;
+    this.engine = options.engine;
 
     this.scene = new Scene(options.engine);
     this.scene.clearColor = new Color4(0.02, 0.02, 0.025, 1);
@@ -77,66 +98,107 @@ export class HubScene {
     });
     this.player.camera.rotation.y = Math.PI / 2;
 
-    // Фотоаппарат на столе (если ещё не взят)
+    // Фотоаппарат (world-модель на столе, если ещё не взят)
     const save = SaveSystem.get();
     if (!save.hasCamera) {
       this.cameraItem = new CameraItem(this.scene, new Vector3(-3, 1.05, 0.35));
     } else {
-      // Уже в руке — viewmodel
       this.cameraItem = new CameraItem(this.scene, new Vector3(0, -10, 0));
       this.cameraItem.pickup(this.player.camera);
     }
 
+    this.laptopSystem = new LaptopSystem({
+      scene: this.scene,
+      canvas: this.canvas,
+      player: this.player,
+      screenPosition: new Vector3(-2.45, 1.30, -0.30),
+      screenLookAt: new Vector3(-3.19, 1.20, -0.30),
+      flightDuration: 0.75,
+    });
+
     this.interaction = new InteractionSystem(this.scene, this.player.camera);
+
+    // --- Ноутбук ---
     this.interaction.register({
       mesh: laptopTrigger,
       hint: "E — открыть ноутбук",
-      range: 3,
-      enabled: () => !this.menuOpen,
-      onInteract: () => this.openLaptop(),
+      range: 3.5,
+      enabled: () =>
+        !this.laptopOpen && !this.laptopSystem.isBusy && !this.workbench.isOpen(),
+      onInteract: () => void this.openLaptop(),
     });
 
+    // --- Верстак ---
+    const benchMesh = this.scene.getMeshByName("benchTop");
+    if (benchMesh) {
+      this.interaction.register({
+        mesh: benchMesh,
+        hint: "E — верстак",
+        range: 3,
+        enabled: () =>
+          !this.laptopOpen && !this.laptopSystem.isBusy && !this.workbench.isOpen(),
+        onInteract: () => void this.openWorkbench(),
+      });
+    }
+
+    // --- Фотоаппарат ---
     if (this.cameraItem && !save.hasCamera) {
       this.interaction.register({
         mesh: this.cameraItem.interactionMesh,
         hint: "E — взять фотоаппарат",
         range: 2.5,
-        enabled: () => !this.cameraItem!.isOwned,
+        enabled: () =>
+          !this.cameraItem!.isOwned && !this.laptopOpen && !this.workbench.isOpen(),
         onInteract: () => this.pickupCamera(),
       });
     }
 
-    // Дверь наружу (задняя стенка)
-    const exitDoor = MeshBuilder.CreateBox("hubExitDoor", { width: 1.6, height: 2.4, depth: 0.3 }, this.scene);
-    exitDoor.position.set(-4.1, 1.2, 0);
-    exitDoor.visibility = 0;
-    exitDoor.isPickable = true;
-    exitDoor.checkCollisions = false;
-    this.interaction.register({
-      mesh: exitDoor,
-      hint: "E — выйти из фуры",
-      range: 3,
-      enabled: () => !this.menuOpen,
-      onInteract: () => this.options.onGoToDesert(),
+    // ================================================================
+    // HUD-хуки
+    // ================================================================
+
+    // Ноутбук
+    this.hud.setLaptopHandlers({
+      onClose: () => void this.closeLaptop(),
+      onSelectLocation: (id) => this.onLocationSelected(id),
+      onBuyItem: (id) => this.onBuyItem(id),
+    });
+
+    // Артефакты (вкладка в ноутбуке)
+    this.hud.setArtifactHandlers({
+      onRestore: (index) => void this.restoreArtifact(index),
+      onSell: (index) => this.sellArtifact(index),
+      onMerge: (indices) => this.mergeArtifacts(indices[0]),
     });
 
     this.hud.setHudMode("hub");
     this.hud.showHud(true);
     this.hud.setHint(null);
-    this.hud.setLaptopHandlers(
-      () => this.launchExpedition(),
-      () => this.closeLaptop()
-    );
 
     window.addEventListener("keydown", this.onKeyDown);
   }
 
+  // --------------------------------------------------------------- public
+
   update(dt: number): void {
-    if (this.menuOpen) return;
+    if (this.laptopOpen || this.laptopSystem.isBusy || this.workbench.isOpen()) return;
     this.player.update(dt);
     this.cameraItem?.update(dt);
     this.interaction.update();
     this.hud.setHint(this.interaction.getHint());
+  }
+
+  setEnabled(value: boolean): void {
+    this.player.setEnabled(value);
+  }
+
+  shouldSuppressPause(): boolean {
+    return (
+      this.laptopOpen ||
+      this.laptopSystem.isActive ||
+      this.laptopSystem.isBusy ||
+      this.workbench.isOpen()
+    );
   }
 
   dispose(): void {
@@ -147,13 +209,150 @@ export class HubScene {
     this.scene.dispose();
   }
 
-  setEnabled(value: boolean): void {
-    this.player.setEnabled(value);
+  // -------------------------------------------------------------- laptop
+
+  private async openLaptop(): Promise<void> {
+    if (this.laptopOpen || this.laptopSystem.isBusy) return;
+    this.laptopOpen = true;
+    this.hud.setHint(null);
+    await this.laptopSystem.open();
+    this.refreshLaptopUI();
+    this.hud.showLaptop(SaveSystem.get().coins);
   }
 
-  shouldSuppressPause(): boolean {
-    return this.menuOpen;
+  private async closeLaptop(): Promise<void> {
+    if (!this.laptopOpen) return;
+    this.laptopOpen = false;
+    this.hud.hideLaptop();
+    await this.laptopSystem.close();
   }
+
+  private refreshLaptopUI(): void {
+    const coins = SaveSystem.get().coins;
+    this.hud.setLaptopCoins(coins);
+
+    this.hud.renderShop(
+      SHOP_ITEMS.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        owned: ShopSystem.ownedCount(item.id),
+        maxStack: item.maxStack,
+        unique: item.unique,
+      }))
+    );
+
+    this.hud.renderInventory(SaveSystem.get().artifacts);
+  }
+
+  private onBuyItem(id: string): void {
+    const result = ShopSystem.buy(id);
+    if (!result.ok) {
+      this.hud.showToast(result.reason ?? "Не удалось купить", 2200);
+      return;
+    }
+    this.hud.showToast("Куплено", 1500);
+    this.refreshLaptopUI();
+  }
+
+  private onLocationSelected(id: string): void {
+    if (id !== "egypt") return;
+    void this.leaveToDesert();
+  }
+
+  private async leaveToDesert(): Promise<void> {
+    await this.closeLaptop();
+    this.options.onGoToDesert();
+  }
+
+  // ------------------------------------------------------------ workbench
+
+  private async openWorkbench(): Promise<void> {
+    if (this.workbench.isOpen()) return;
+
+    // Находим первый неотреставрированный артефакт
+    const artifacts = SaveSystem.get().artifacts;
+    let index = -1;
+    for (let i = 0; i < artifacts.length; i++) {
+      if (!artifacts[i].restored) {
+        index = i;
+        break;
+      }
+    }
+
+    if (index === -1) {
+      this.hud.showToast("Нет артефактов для реставрации. Сначала в экспедицию.", 3200);
+      return;
+    }
+
+    this.player.setEnabled(false);
+    this.hud.setHint(null);
+
+    const result = await this.workbench.start(index);
+
+    this.player.setEnabled(true);
+
+    if (result.action === "restore" && typeof result.quality === "number") {
+      SaveSystem.updateArtifact(index, {
+        restored: true,
+        quality: result.quality,
+      });
+      this.hud.showToast(
+        `Артефакт отреставрирован: ${Math.round(result.quality * 100)}%`,
+        2500
+      );
+    }
+  }
+
+  private async restoreArtifact(index: number): Promise<void> {
+    const wasLaptopOpen = this.laptopOpen;
+
+    // Прячем ноутбук, чтобы верстак перекрыл экран
+    if (wasLaptopOpen) {
+      this.hud.hideLaptop();
+    }
+
+    const result = await this.workbench.start(index);
+
+    if (result.action === "restore" && typeof result.quality === "number") {
+      SaveSystem.updateArtifact(index, {
+        restored: true,
+        quality: result.quality,
+      });
+      this.hud.showToast(
+        `Артефакт отреставрирован: ${Math.round(result.quality * 100)}%`,
+        2500
+      );
+    }
+
+    if (wasLaptopOpen) {
+      this.refreshLaptopUI();
+      this.hud.showLaptop(SaveSystem.get().coins);
+    }
+  }
+
+  private sellArtifact(index: number): void {
+    const price = ArtifactSystem.sell(index);
+    if (price <= 0) {
+      this.hud.showToast("Нечего продавать", 1800);
+      return;
+    }
+    this.hud.showToast(`Продано за ${price} монет`, 2000);
+    this.refreshLaptopUI();
+  }
+
+  private mergeArtifacts(baseIndex: number): void {
+    const result = ArtifactSystem.mergeFirstOfKind(baseIndex);
+    if (!result.ok) {
+      this.hud.showToast(result.reason, 2200);
+      return;
+    }
+    this.hud.showToast("Слияние успешно! Требуется реставрация.", 2500);
+    this.refreshLaptopUI();
+  }
+
+  // ---------------------------------------------------------------- build
 
   private pickupCamera(): void {
     if (!this.cameraItem || this.cameraItem.isOwned) return;
@@ -201,11 +400,11 @@ export class HubScene {
     };
 
     add("truckFloor", length, thickness, width, 0, -thickness / 2, 0, floorMat, true);
-    add("truckCeiling", length, thickness, width, 0, 3 + thickness / 2, 0, ceilingMat, true);
-    add("truckWallBack", length, height, thickness, 0, height / 2, -2 - thickness / 2, wallMat, true);
-    add("truckWallFront", length, height, thickness, 0, height / 2, 2 + thickness / 2, wallMat, true);
-    add("truckWallLeft", thickness, height, width, -4 - thickness / 2, height / 2, 0, wallMat, true);
-    add("truckWallRight", thickness, height, width, 4 + thickness / 2, height / 2, 0, wallMat, true);
+    add("truckCeiling", length, thickness, width, 0, height + thickness / 2, 0, ceilingMat, true);
+    add("truckWallBack", length, height, thickness, 0, height / 2, -width / 2 - thickness / 2, wallMat, true);
+    add("truckWallFront", length, height, thickness, 0, height / 2, width / 2 + thickness / 2, wallMat, true);
+    add("truckWallLeft", thickness, height, width, -length / 2 - thickness / 2, height / 2, 0, wallMat, true);
+    add("truckWallRight", thickness, height, width, length / 2 + thickness / 2, height / 2, 0, wallMat, true);
   }
 
   private buildFurniture(): Mesh {
@@ -242,6 +441,7 @@ export class HubScene {
       return mesh;
     };
 
+    // Стол с ноутбуком (западная стена фуры)
     box("tableTop", 1.6, 0.1, 1.6, -3, 0.95, 0, wood);
     box("tableLeg1", 0.1, 0.9, 0.1, -3.7, 0.45, -0.7, wood);
     box("tableLeg2", 0.1, 0.9, 0.1, -2.3, 0.45, -0.7, wood);
@@ -258,46 +458,26 @@ export class HubScene {
     trigger.isPickable = true;
     trigger.checkCollisions = false;
 
-    box("benchTop", 2.4, 0.12, 0.9, 3, 0.9, -1.2, wood);
+    // Верстак (восточная стена). Имя benchTop — по нему регистрируется взаимодействие.
+    const benchTop = box("benchTop", 2.4, 0.12, 0.9, 3, 0.9, -1.2, wood);
+    benchTop.isPickable = true;  // ← важно: верстак кликабелен
     box("benchLeg1", 0.1, 0.85, 0.1, 1.9, 0.42, -1.55, metal);
     box("benchLeg2", 0.1, 0.85, 0.1, 4.1, 0.42, -1.55, metal);
     box("benchLeg3", 0.1, 0.85, 0.1, 1.9, 0.42, -0.85, metal);
     box("benchLeg4", 0.1, 0.85, 0.1, 4.1, 0.42, -0.85, metal);
 
+    // Стеллаж
     box("shelfBoard1", 2.4, 0.08, 0.7, 3, 0.4, 1.2, wood);
     box("shelfBoard2", 2.4, 0.08, 0.7, 3, 1.0, 1.2, wood);
     box("shelfBoard3", 2.4, 0.08, 0.7, 3, 1.6, 1.2, wood);
     box("shelfSideL", 0.06, 1.7, 0.7, 1.83, 0.85, 1.2, wood);
     box("shelfSideR", 0.06, 1.7, 0.7, 4.17, 0.85, 1.2, wood);
 
+    // Кровать
     box("bedFrame", 2.0, 0.2, 1.1, -3, 0.25, 1.4, wood);
     box("bedMattress", 1.8, 0.2, 1.0, -3, 0.5, 1.4, fabric);
     box("bedPillow", 0.45, 0.15, 0.7, -3.75, 0.62, 1.4, fabric);
 
     return trigger;
-  }
-
-  private openLaptop(): void {
-    if (this.menuOpen) return;
-    this.menuOpen = true;
-    this.player.setEnabled(false);
-    this.options.engine.exitPointerlock();
-    this.hud.setHint(null);
-    this.hud.showLaptop(SaveSystem.get().coins);
-  }
-
-  private closeLaptop(): void {
-    if (!this.menuOpen) return;
-    this.menuOpen = false;
-    this.hud.hideLaptop();
-    this.player.setEnabled(true);
-    this.options.engine.enterPointerlock();
-  }
-
-  private launchExpedition(): void {
-    this.menuOpen = false;
-    this.hud.hideLaptop();
-    // Через ноутбук — сразу в пустыню (или пирамиду)
-    this.options.onGoToDesert();
   }
 }

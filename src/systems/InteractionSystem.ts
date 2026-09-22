@@ -1,19 +1,13 @@
 import { AbstractMesh, Ray, Scene, UniversalCamera, Vector3 } from "@babylonjs/core";
 
-/** Описание интерактивного объекта в мире. */
 export interface Interactable {
-  /** Меш, по которому проверяется попадание луча. */
   mesh: AbstractMesh;
-  /** Текст подсказки в HUD. */
   hint: string;
-  /** Максимальная дистанция взаимодействия (метры). */
   range: number;
-  /** Необязательный фильтр доступности (например, "бур ещё не запущен"). */
   enabled?: () => boolean;
   onInteract: () => void;
 }
 
-/** Raycast-система взаимодействия: "смотрит на объект + E". */
 export class InteractionSystem {
   private readonly items: Interactable[] = [];
   private current: Interactable | null = null;
@@ -32,24 +26,23 @@ export class InteractionSystem {
     this.current = null;
   }
 
-  /** Обновляет текущую цель (вызывать каждый кадр). */
+  dispose(): void {
+    this.clear();
+  }
+
   update(): void {
     this.current = this.findTarget();
   }
 
-  /** Подсказка для HUD или null. */
   getHint(): string | null {
     return this.current ? this.current.hint : null;
   }
 
-  /** Пытается взаимодействовать с текущей целью. */
   interact(): boolean {
     if (!this.current) return false;
     this.current.onInteract();
     return true;
   }
-
-  // ---------------------------------------------------------------- private
 
   private isAvailable(item: Interactable): boolean {
     if (item.enabled && !item.enabled()) return false;
