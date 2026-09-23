@@ -1,0 +1,550 @@
+<mxfile host="app.diagrams.net" agent="Artifact-Legacy-Structural" pages="3">
+  <diagram name="1. Class" id="al-class">
+    <mxGraphModel dx="1654" dy="1169" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Диаграмма классов игры «Артефакт: Наследие»" style="text;html=1;fontSize=18;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="450" y="10" width="800" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsGM" value="GameManager" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="240" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsGM-a" value="- currentScene: Scene&#xa;- gameState: GameState&#xa;- seed: number" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsGM">
+          <mxGeometry y="26" width="240" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="clsGM-m" value="+ getInstance(): GameManager&#xa;+ switchScene(s: Scene): void&#xa;+ startExpedition(seed: number): void&#xa;+ endExpedition(verdict: Verdict): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsGM">
+          <mxGeometry y="81" width="240" height="69" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsScene" value="Scene {abstract}" style="swimlane;fontStyle=5;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="400" y="60" width="240" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsScene-a" value="- engine: Engine&#xa;- name: String&#xa;- uiRoot: HTMLElement" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsScene">
+          <mxGeometry y="26" width="240" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="clsScene-m" value="+ load(): void&#xa;+ unload(): void&#xa;+ update(dt: number): void&#xa;+ render(): void&#xa;+ onEnter(): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsScene">
+          <mxGeometry y="81" width="240" height="69" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsPlayer" value="Player" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="760" y="60" width="240" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="clsPlayer-a" value="- position: Vector3&#xa;- money: number&#xa;- hp: number&#xa;- inventory: Inventory&#xa;- equipment: Equipment" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsPlayer">
+          <mxGeometry y="26" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="clsPlayer-m" value="+ move(v: Vector3): void&#xa;+ interact(target: Interactable): void&#xa;+ addMoney(n: number): void&#xa;+ heal(n: number): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsPlayer">
+          <mxGeometry y="96" width="240" height="74" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsSave" value="SaveSystem" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="60" width="240" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsSave-a" value="- storageKey: String&#xa;- autoSaveInterval: int" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsSave">
+          <mxGeometry y="26" width="240" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="clsSave-m" value="+ save(p: Player): void&#xa;+ load(): Player&#xa;+ reset(): void&#xa;+ hasSave(): bool" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsSave">
+          <mxGeometry y="81" width="240" height="69" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsHub" value="HubScene" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#eaf3ff;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="160" y="300" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="clsHub-m" value="+ openLaptop(): void&#xa;+ openWorkbench(): void&#xa;+ chooseLocation(id: int): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsHub">
+          <mxGeometry y="26" width="200" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="clsDesert" value="DesertScene" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#eaf3ff;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="380" y="300" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="clsDesert-m" value="+ approachEntrance(): void&#xa;+ startLockpick(): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsDesert">
+          <mxGeometry y="26" width="200" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="clsExp" value="ExpeditionScene" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#eaf3ff;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="600" y="300" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="clsExp-m" value="+ installBur(room: Room): Bur&#xa;+ spawnAnomaly(r: Room): void&#xa;+ extractArtifacts(): Artifact[]" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsExp">
+          <mxGeometry y="26" width="220" height="94" as="geometry" />
+        </mxCell>
+        <mxCell id="clsMenu" value="MenuScene" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#eaf3ff;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="840" y="300" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="clsMenu-m" value="+ startNewGame(): void&#xa;+ continueGame(): void&#xa;+ showSettings(): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsMenu">
+          <mxGeometry y="26" width="200" height="94" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsInv" value="Inventory" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="300" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="clsInv-a" value="- artifacts: List&lt;Artifact&gt;&#xa;- capacity: int" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsInv">
+          <mxGeometry y="26" width="200" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="clsInv-m" value="+ add(a: Artifact): bool&#xa;+ remove(a: Artifact): void&#xa;+ merge(): Artifact" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsInv">
+          <mxGeometry y="70" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsLG" value="LevelGenerator" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="40" y="520" width="240" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="clsLG-a" value="- seed: number&#xa;- floors: int = 3&#xa;- gridSize: int = 4" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsLG">
+          <mxGeometry y="26" width="240" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="clsLG-m" value="+ generate(seed: number): Room[][]&#xa;+ randomWalk(from: Room): Room&#xa;+ verifyReachability(): bool" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsLG">
+          <mxGeometry y="81" width="240" height="89" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsRoom" value="Room" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="320" y="520" width="200" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="clsRoom-a" value="- gridX: int&#xa;- gridY: int&#xa;- floor: int&#xa;- type: RoomType&#xa;- visited: bool" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsRoom">
+          <mxGeometry y="26" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="clsRoom-m" value="+ isFinal(): bool&#xa;+ getNeighbors(): Room[]&#xa;+ hasStairs(): bool" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsRoom">
+          <mxGeometry y="106" width="200" height="64" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsBur" value="Bur (Drill)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="560" y="520" width="220" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="clsBur-a" value="- state: BurState&#xa;- hp: number&#xa;- timer: number&#xa;- progress: float" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsBur">
+          <mxGeometry y="26" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="clsBur-m" value="+ place(): void&#xa;+ startDrilling(): void&#xa;+ takeDamage(n: number): void&#xa;+ complete(): Artifact[]" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsBur">
+          <mxGeometry y="96" width="220" height="74" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsAnom" value="Anomaly" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="820" y="520" width="200" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="clsAnom-a" value="- position: Vector3&#xa;- state: AnomalyState&#xa;- floor: int&#xa;- hp: int" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsAnom">
+          <mxGeometry y="26" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="clsAnom-m" value="+ chase(target: Player): void&#xa;+ attack(b: Bur): void&#xa;+ onPhoto(): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsAnom">
+          <mxGeometry y="96" width="200" height="74" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsAI" value="AnomalyAI" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="520" width="220" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="clsAI-a" value="- currentState: AnomalyState&#xa;- patrolPath: Vector3[]&#xa;- chaseRadius: number" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsAI">
+          <mxGeometry y="26" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="clsAI-m" value="+ update(a: Anomaly): void&#xa;+ transition(s: AnomalyState): void&#xa;+ canSee(p: Player): bool" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsAI">
+          <mxGeometry y="96" width="220" height="74" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsCam" value="PhotoCamera" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="40" y="760" width="220" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsCam-a" value="- shotsLeft: int&#xa;- cooldown: float" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsCam">
+          <mxGeometry y="26" width="220" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="clsCam-m" value="+ takePhoto(a: Anomaly): bool&#xa;+ reload(): void&#xa;+ aim(): Ray" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsCam">
+          <mxGeometry y="70" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsWB" value="Workbench" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="300" y="760" width="220" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsWB-a" value="- currentArtifact: Artifact&#xa;- tracedOutline: Path" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsWB">
+          <mxGeometry y="26" width="220" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="clsWB-m" value="+ start(a: Artifact): void&#xa;+ updateTrace(p: Point): void&#xa;+ finish(): Artifact" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsWB">
+          <mxGeometry y="70" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsLP" value="Lockpick" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="560" y="760" width="220" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsLP-a" value="- angle: float&#xa;- speed: float&#xa;- zoneStart: float&#xa;- zoneEnd: float" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsLP">
+          <mxGeometry y="26" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="clsLP-m" value="+ update(dt: number): void&#xa;+ tryUnlock(): bool&#xa;+ useAutoPick(): bool" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsLP">
+          <mxGeometry y="96" width="220" height="74" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsIS" value="InteractionSystem" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="820" y="760" width="220" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsIS-a" value="- interactables: List&lt;Interactable&gt;&#xa;- maxDistance: float = 3.0" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsIS">
+          <mxGeometry y="26" width="220" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="clsIS-m" value="+ register(o: Interactable): void&#xa;+ raycast(): Interactable&#xa;+ interact(): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsIS">
+          <mxGeometry y="70" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsIntf" value="«interface»&#xa;Interactable" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="760" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="clsIntf-m" value="+ interact(): void&#xa;+ getPrompt(): String&#xa;+ canInteract(): bool" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsIntf">
+          <mxGeometry y="40" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsArt" value="Artifact" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="40" y="960" width="240" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsArt-a" value="- id: int&#xa;- name: String&#xa;- rarity: Rarity&#xa;- quality: float&#xa;- value: int" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsArt">
+          <mxGeometry y="26" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="clsArt-m" value="+ getPrice(): int&#xa;+ upgrade(q: float): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsArt">
+          <mxGeometry y="96" width="240" height="54" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsEquip" value="Equipment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=26;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="320" y="960" width="220" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="clsEquip-a" value="- hasLockpick: bool&#xa;- hasAutoPick: bool&#xa;- hasMedkit: bool&#xa;- drillLevel: int" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsEquip">
+          <mxGeometry y="26" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="clsEquip-m" value="+ purchase(id: String): bool&#xa;+ applyBuffs(): void" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;whiteSpace=wrap;" vertex="1" parent="clsEquip">
+          <mxGeometry y="96" width="220" height="54" as="geometry" />
+        </mxCell>
+
+        <mxCell id="clsRarity" value="«enumeration»&#xa;Rarity&#xa;Common, Uncommon, Rare, Epic, Legendary" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=60;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="580" y="960" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="clsBS" value="«enumeration»&#xa;BurState&#xa;Idle, Installing, Drilling, Completed, Destroyed" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=60;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="820" y="960" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="clsAS" value="«enumeration»&#xa;AnomalyState&#xa;Patrol, Chase, Attack" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=60;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="960" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rGMScene" edge="1" parent="1" source="clsGM" target="clsScene" style="endArrow=open;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" value="1     1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rSceneHub" edge="1" parent="1" source="clsHub" target="clsScene" style="endArrow=block;endFill=0;html=1;exitX=0.5;exitY=0;entryX=0.15;entryY=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rSceneDesert" edge="1" parent="1" source="clsDesert" target="clsScene" style="endArrow=block;endFill=0;html=1;exitX=0.5;exitY=0;entryX=0.4;entryY=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rSceneExp" edge="1" parent="1" source="clsExp" target="clsScene" style="endArrow=block;endFill=0;html=1;exitX=0.5;exitY=0;entryX=0.7;entryY=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rSceneMenu" edge="1" parent="1" source="clsMenu" target="clsScene" style="endArrow=block;endFill=0;html=1;exitX=0.5;exitY=0;entryX=0.9;entryY=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rPlayerInv" edge="1" parent="1" source="clsPlayer" target="clsInv" style="endArrow=diamond;endFill=1;html=1;exitX=1;exitY=0.4;entryX=0;entryY=0.5;" value="1     1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rPlayerEq" edge="1" parent="1" source="clsPlayer" target="clsEquip" style="endArrow=diamond;endFill=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;edgeStyle=orthogonalEdgeStyle;" value="1     1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="880" y="460" />
+              <mxPoint x="430" y="460" />
+              <mxPoint x="430" y="900" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rInvArt" edge="1" parent="1" source="clsInv" target="clsArt" style="endArrow=diamond;endFill=0;html=1;exitX=0.5;exitY=1;entryX=0.9;entryY=0;edgeStyle=orthogonalEdgeStyle;" value="1     *">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rLGRoom" edge="1" parent="1" source="clsLG" target="clsRoom" style="endArrow=diamond;endFill=1;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" value="1     *">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rExpBur" edge="1" parent="1" source="clsExp" target="clsBur" style="endArrow=diamond;endFill=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;edgeStyle=orthogonalEdgeStyle;" value="1     0..1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="460" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rExpAnom" edge="1" parent="1" source="clsExp" target="clsAnom" style="endArrow=diamond;endFill=0;html=1;exitX=0.7;exitY=1;entryX=0.3;entryY=0;edgeStyle=orthogonalEdgeStyle;" value="1     *">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="755" y="480" />
+              <mxPoint x="880" y="480" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rAIAnom" edge="1" parent="1" source="clsAI" target="clsAnom" style="endArrow=diamond;endFill=1;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" value="1     1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rCamAnom" edge="1" parent="1" source="clsCam" target="clsAnom" style="endArrow=open;dashed=1;html=1;exitX=1;exitY=0.3;entryX=0.2;entryY=1;edgeStyle=orthogonalEdgeStyle;fontSize=10;" value="«use»">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rISIntf" edge="1" parent="1" source="clsIS" target="clsIntf" style="endArrow=open;dashed=1;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;fontSize=10;" value="«use»">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rBurIntf" edge="1" parent="1" source="clsBur" target="clsIntf" style="endArrow=block;endFill=0;dashed=1;html=1;exitX=1;exitY=0.8;entryX=0.2;entryY=0;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rWBIntf" edge="1" parent="1" source="clsWB" target="clsIntf" style="endArrow=block;endFill=0;dashed=1;html=1;exitX=0.9;exitY=1;entryX=0.1;entryY=1;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rLPIntf" edge="1" parent="1" source="clsLP" target="clsIntf" style="endArrow=block;endFill=0;dashed=1;html=1;exitX=1;exitY=0.5;entryX=0.5;entryY=1;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rSavePlayer" edge="1" parent="1" source="clsSave" target="clsPlayer" style="endArrow=open;dashed=1;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;fontSize=10;" value="«use»">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rArtRar" edge="1" parent="1" source="clsArt" target="clsRarity" style="endArrow=open;dashed=1;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;fontSize=10;" value="«use»">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rBurBS" edge="1" parent="1" source="clsBur" target="clsBS" style="endArrow=open;dashed=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;fontSize=10;" value="«use»">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rAnomAS" edge="1" parent="1" source="clsAnom" target="clsAS" style="endArrow=open;dashed=1;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;fontSize=10;" value="«use»">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="noteCls" value="&lt;b&gt;Типы отношений:&lt;/b&gt; наследование (Scene → Hub/Desert/Exp/Menu), композиция (Player◆Inventory◆Equipment, LevelGenerator◆Room, ExpeditionScene◆Bur, AnomalyAI◆Anomaly), агрегация (Inventory◇Artifact, ExpeditionScene◇Anomaly), ассоциации с кратностями (GameManager–Scene, Player–Inventory), зависимости и realization (Bur/Workbench/Lockpick реализуют Interactable)." style="text;html=1;align=left;verticalAlign=top;fontSize=11;spacingLeft=8;spacingTop=8;whiteSpace=wrap;fillColor=#eaf3ff;strokeColor=#7ea6d4;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="400" width="300" height="220" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="2. Component" id="al-comp">
+    <mxGraphModel dx="1654" dy="1169" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Диаграмма компонентов игры «Артефакт: Наследие»" style="text;html=1;fontSize=18;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="400" y="15" width="850" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="layer1" value="«layer» Presentation Layer (HTML/CSS поверх canvas)" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#eaf3ff;strokeColor=#7ea6d4;verticalAlign=top;align=left;fontSize=13;fontStyle=1;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="70" width="1574" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ui_hud" value="HUDComponent&#xa;«component»&#xa;HUD: HP, монеты, счётчик снимков" style="shape=component;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="120" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_menu" value="MenuUI&#xa;«component»&#xa;Главное меню, старт/продолжить" style="shape=component;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="310" y="120" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_laptop" value="LaptopUI&#xa;«component»&#xa;Выбор локации, магазин, продажа" style="shape=component;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="540" y="120" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_bench" value="WorkbenchUI&#xa;«component»&#xa;Мини-игра реставрации" style="shape=component;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="770" y="120" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_lock" value="LockpickUI&#xa;«component»&#xa;Мини-игра взлома двери" style="shape=component;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="120" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_verdict" value="VerdictUI&#xa;«component»&#xa;Экран результата экспедиции" style="shape=component;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="120" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_cross" value="CrosshairPrompt&#xa;«component»&#xa;Прицел + подсказка E" style="shape=component;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="120" width="130" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="layer2" value="«layer» Game Logic Layer (TypeScript, Vite)" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#eaf7ea;strokeColor=#7eb37e;verticalAlign=top;align=left;fontSize=13;fontStyle=1;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="290" width="1574" height="330" as="geometry" />
+        </mxCell>
+
+        <mxCell id="if_gm" value="«interface»&#xa;IGameManager" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="350" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="if_inter" value="«interface»&#xa;IInteractable" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="350" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="if_gen" value="«interface»&#xa;ILevelGenerator" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="350" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="if_ai" value="«interface»&#xa;IAnomalyAI" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="840" y="350" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="if_save" value="«interface»&#xa;ISaveable" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="350" width="140" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c_gm" value="GameManager&#xa;«component»&#xa;Singleton, переключение сцен" style="shape=component;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="440" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="c_inter" value="InteractionSystem&#xa;«component»&#xa;Raycast, регистрация Interactable" style="shape=component;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="440" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="c_gen" value="LevelGenerator&#xa;«component»&#xa;Random walk + seed + BFS" style="shape=component;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="540" y="440" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="c_ai" value="AnomalyAI&#xa;«component»&#xa;State machine Patrol/Chase/Attack" style="shape=component;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="440" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="c_bur" value="BurController&#xa;«component»&#xa;Установка, таймер, HP бура" style="shape=component;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="980" y="440" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="c_save" value="SaveSystem&#xa;«component»&#xa;Сохранение в localStorage" style="shape=component;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="440" width="180" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l_gm" edge="1" parent="1" source="c_gm" target="if_gm" style="endArrow=none;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l_inter" edge="1" parent="1" source="c_inter" target="if_inter" style="endArrow=none;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l_gen" edge="1" parent="1" source="c_gen" target="if_gen" style="endArrow=none;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l_ai" edge="1" parent="1" source="c_ai" target="if_ai" style="endArrow=none;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="l_save" edge="1" parent="1" source="c_save" target="if_save" style="endArrow=none;html=1;"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="layer3" value="«layer» Domain Systems Layer" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#fff4e6;strokeColor=#d4a87e;verticalAlign=top;align=left;fontSize=13;fontStyle=1;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="640" width="1574" height="240" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s_art" value="ArtifactSystem&#xa;«component»&#xa;Редкости, слияние, продажа" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="700" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s_shop" value="ShopSystem&#xa;«component»&#xa;Покупки, применение бонусов" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="340" y="700" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s_bench" value="WorkbenchSystem&#xa;«component»&#xa;Мини-игра реставрации" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="700" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s_lock" value="LockpickSystem&#xa;«component»&#xa;Мини-игра взлома двери" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="860" y="700" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="s_photo" value="PhotoCameraSystem&#xa;«component»&#xa;Фото аномалий, счётчик снимков" style="shape=component;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="700" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="layer4" value="«layer» Rendering &amp; Infrastructure" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5e6ff;strokeColor=#9673a6;verticalAlign=top;align=left;fontSize=13;fontStyle=1;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="910" width="1574" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="r_babylon" value="BabylonEngine&#xa;«component»&#xa;WebGL render loop, physics" style="shape=component;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="970" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r_atmo" value="Atmosphere&#xa;«component»&#xa;Postprocess, particles, fog" style="shape=component;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="340" y="970" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r_storage" value="LocalStorageAdapter&#xa;«component»&#xa;Чтение/запись прогресса" style="shape=component;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="970" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="r_sdk" value="YandexSDKAdapter&#xa;«component» (перспектива)&#xa;Rewarded video, leaderboard" style="shape=component;whiteSpace=wrap;html=1;dashed=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="860" y="970" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d1" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ui_laptop" target="c_gm">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="640" y="280" /><mxPoint x="190" y="280" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d2" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ui_hud" target="c_bur">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="180" y="280" /><mxPoint x="1070" y="280" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d3" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ui_lock" target="c_inter">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1100" y="280" /><mxPoint x="410" y="280" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d4" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ui_bench" target="s_bench">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="870" y="280" /><mxPoint x="710" y="280" /><mxPoint x="710" y="620" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d5" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="c_gm" target="c_gen">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="c_ai" target="s_photo">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="850" y="620" /><mxPoint x="1230" y="620" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d7" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="c_save" target="r_storage">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1290" y="620" /><mxPoint x="710" y="620" /><mxPoint x="710" y="900" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d8" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="c_bur" target="s_art">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1070" y="620" /><mxPoint x="190" y="620" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d9" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="c_gm" target="r_atmo">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="190" y="620" /><mxPoint x="450" y="620" /><mxPoint x="450" y="900" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d10" value="«use»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="s_art" target="r_babylon">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="190" y="880" /></Array></mxGeometry>
+        </mxCell>
+        <mxCell id="d11" value="«use (future)»" style="endArrow=open;dashed=1;html=1;fontSize=10;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;fontColor=#666666;strokeColor=#999999;" edge="1" parent="1" source="r_storage" target="r_sdk">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="desc" value="&lt;b&gt;Слои:&lt;/b&gt; Presentation (6 UI) → Game Logic (5 сервисов + 5 интерфейсов) → Domain Systems (5 подсистем) → Rendering &amp; Infrastructure (4 адаптера). Зависимости идут только сверху вниз и только через интерфейсы — реализация (Babylon, localStorage, Yandex SDK) может быть заменена без изменения бизнес-логики." style="text;html=1;align=left;verticalAlign=top;fontSize=11;spacingLeft=8;spacingTop=8;whiteSpace=wrap;fillColor=#eaf3ff;strokeColor=#7ea6d4;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="970" width="490" height="150" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="3. Deployment" id="al-deploy">
+    <mxGraphModel dx="1654" dy="1169" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Диаграмма развёртывания игры «Артефакт: Наследие»" style="text;html=1;fontSize=18;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="400" y="15" width="850" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nodeClient" value="«device»&lt;br&gt;&lt;b&gt;Устройство пользователя&lt;/b&gt;&lt;br&gt;Windows / macOS / Linux / Android / iOS" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="520" height="700" as="geometry" />
+        </mxCell>
+
+        <mxCell id="browser" value="«execution environment»&lt;br&gt;&lt;b&gt;Браузер&lt;/b&gt;&lt;br&gt;Chrome 100+ / Firefox / Safari" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=11;fillColor=#eaf3ff;strokeColor=#6c8ebf;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="150" width="480" height="610" as="geometry" />
+        </mxCell>
+
+        <mxCell id="kHtml" value="HTML / CSS overlay (UI, HUD, миниигры)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="220" width="440" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="kCanvas" value="Canvas + WebGL контекст (сцена Babylon.js)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="282" width="440" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="kTS" value="Игровой JS-бандл (Vite build, TypeScript)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="344" width="440" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="kBJS" value="Babylon.js runtime (WebGL render, physics)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="406" width="440" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="kLS" value="localStorage (player profile, saves)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="468" width="440" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="kGPU" value="GPU / WebGL драйвер (аппаратное ускорение)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="530" width="440" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="kSDK" value="Yandex Games SDK Adapter (перспектива, пунктир)" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="100" y="592" width="440" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nodeCDN" value="«device»&lt;br&gt;&lt;b&gt;CDN Яндекс Игр&lt;/b&gt;&lt;br&gt;(статический хостинг)" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=12;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="660" y="80" width="420" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="cdnIndex" value="index.html (точка входа)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="160" width="380" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cdnJS" value="JS / CSS бандлы (Vite build artifacts)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="222" width="380" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cdnAssets" value="Assets: модели (.glb), текстуры, звук" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="284" width="380" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cdnManifest" value="manifest.json (иконки, метаданные)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="346" width="380" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cdnSize" value="Общий размер архива ≤ 100 МБ (лимит Яндекс Игр)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f9f9f9;strokeColor=#82b366;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="680" y="408" width="380" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="nodeSDK" value="«device» (перспектива)&lt;br&gt;&lt;b&gt;Платформа Яндекс Игр&lt;/b&gt;&lt;br&gt;SDK, реклама, лидерборды" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=12;dashed=1;fillColor=#f5f5f5;strokeColor=#999999;strokeWidth=2;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="80" width="380" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="sdkReward" value="Rewarded video server" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="160" width="340" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="sdkLeader" value="Leaderboards API" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="222" width="340" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="sdkAuth" value="Auth / Player data API" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;fillColor=#ffffff;strokeColor=#999999;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="284" width="340" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1" value="HTTPS — загрузка статики (при старте игры)" style="endArrow=open;html=1;fontSize=11;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.3;entryX=0;entryY=0.3;" edge="1" parent="1" source="nodeClient" target="nodeCDN">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" value="WebGL API — вызовы к GPU (локально, без сети)" style="endArrow=open;html=1;fontSize=11;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="kCanvas" target="kGPU">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" value="localStorage API — чтение/запись прогресса (same-origin, без сети)" style="endArrow=open;html=1;fontSize=11;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="kLS" target="kTS">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" value="«HTTPS / REST (SDK)» — только при интеграции с Яндекс Играми (перспектива)" style="endArrow=open;dashed=1;html=1;fontSize=11;fontColor=#666666;strokeColor=#999999;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.85;entryX=0;entryY=0.85;" edge="1" parent="1" source="nodeClient" target="nodeSDK">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="desc" value="&lt;b&gt;Три узла:&lt;/b&gt; (1) устройство пользователя с браузером, где выполняется весь код, работает WebGL и хранится localStorage; (2) статический CDN Яндекс Игр, откуда загружаются бандлы и ассеты; (3) платформа Яндекс Игр (пунктир, перспектива) для rewarded video, лидербордов и синхронизации.&lt;br&gt;&lt;b&gt;Протоколы:&lt;/b&gt; HTTPS для загрузки статики; WebGL (локально, к GPU); localStorage API (локально, без сети); HTTPS/REST (SDK, только при интеграции с Яндекс Играми).&lt;br&gt;&lt;b&gt;Ключевое решение:&lt;/b&gt; вся игровая логика выполняется на клиенте, сервер нужен только для раздачи статики. Данные игрока не покидают устройство до момента интеграции с SDK Яндекс Игр." style="text;html=1;align=left;verticalAlign=top;fontSize=11;spacingLeft=8;spacingTop=8;whiteSpace=wrap;fillColor=#eaf3ff;strokeColor=#7ea6d4;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="830" width="1480" height="220" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
