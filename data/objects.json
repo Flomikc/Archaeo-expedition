@@ -1,0 +1,13 @@
+{
+  "artifacts": [
+    { "id": "clay_tablet", "name": "Глиняная табличка", "rarity": "common", "value": 25 },
+    { "id": "amphora_shard", "name": "Осколок амфоры", "rarity": "common", "value": 30 },
+    { "id": "old_scarab", "name": "Старый скарабей", "rarity": "common", "value": 35 },
+    { "id": "bronze_medallion", "name": "Бронзовый медальон", "rarity": "uncommon", "value": 70 },
+    { "id": "cat_statue", "name": "Статуэтка кошки", "rarity": "uncommon", "value": 85 },
+    { "id": "gold_scarab", "name": "Золотой скарабей", "rarity": "rare", "value": 200 },
+    { "id": "canopic_jar", "name": "Канопа", "rarity": "rare", "value": 230 },
+    { "id": "pharaoh_mask", "name": "Маска фараона", "rarity": "epic", "value": 700 },
+    { "id": "eye_of_horus", "name": "Око Гора", "rarity": "legendary", "value": 2500 }
+  ]
+}
