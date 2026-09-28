@@ -1,34 +1,52 @@
-# Activity Diagram: Покупка в магазине с обработкой ошибок
+# Activity Diagram: Полный игровой цикл с обработкой ошибок
+
+## Описание
+
+Диаграмма показывает основной поток игрока от старта до завершения экспедиции,
+с точками ветвления, где возможны ошибки и как они обрабатываются.
 
 ```mermaid
 flowchart TD
-    A[Игрок открывает магазин] --> B[Выбирает предмет]
-    B --> C{Предмет существует?}
-    C -- Нет --> E1[Ошибка: ValidationError<br/>«Некорректный предмет»]
-    E1 --> Z[Тост пользователю]
-    C -- Да --> D{Достаточно монет?}
-    D -- Нет --> E2[Бизнес-отказ:<br/>повернуть reason = «Мало монет»]
-    E2 --> Z[Тост пользователю]
-    D -- Да --> F{Уже куплено<br/>или максимум?}
-    F -- Да --> E3[Ошибка: ShopError<br/>«Уже куплено / Максимум»]
-    E3 --> Z
-    F -- Нет --> G[Списать монеты]
-    G --> H[Добавить предмет в инвентарь]
-    H --> I[SaveSystem.save]
-    I --> J{localStorage доступен?}
-    J -- Нет --> E4[SaveError<br/>Лог в консоль]
-    E4 --> K[Уведомление: прогресс может<br/>не сохраниться]
-    J -- Да --> L[Успех]
-    K --> M[Обновить UI]
-    L --> M
-    Z --> M
-    M --> N[Конец]
-```
+    Start([Старт игры]) --> Load{Загрузка<br/>сохранения}
+    Load -- "JSON повреждён" --> Fallback[Fallback: emptySave<br/>SaveError не бросается]
+    Load -- OK --> Hub[Сцена: Фургон]
 
-## Пояснение
+    Fallback --> Hub
+    Hub --> OpenLaptop{Игрок открывает<br/>ноутбук}
+    OpenLaptop -- "E на ноутбуке" --> Shop[Вкладка магазина]
 
-На диаграмме чётко разделены два пути:
-- **Ошибки (throw)** — узлы E1, E3, E5 (ValidationError, ArtifactError).
-- **Бизнес-отказы (return reason)** — узел E2 («Мало монет»).
+    Shop --> BuyAttempt{Покупка}
+    BuyAttempt -- "id пустой" --> VErr[throw ValidationError]
+    BuyAttempt -- "id есть, товара нет" --> SErr[throw ShopError]
+    BuyAttempt -- "монет мало / лимит" --> BReason[return ok:false, reason]
+    BuyAttempt -- OK --> BuyOK[Списать монеты, выдать предмет]
 
-Первые ловятся `try/catch`, вторые обрабатываются как обычный результат функции.
+    VErr --> Catch[catch в HUD]
+    SErr --> Catch
+    Catch --> Log[console.error с префиксом<br/>класс.метод]
+    Log --> Hub
+
+    BReason --> Toast[Тост пользователю]
+    BuyOK --> Toast
+    Toast --> Hub
+
+    Hub --> Expedition[Сцена: Пирамида]
+    Expedition --> FindDrill{Найти бур}
+    FindDrill -- "E на буре" --> Drilling[Раскопки 3 мин]
+    FindDrill -- "нет бура" --> Lost[Заблудился<br/>ничего не происходит]
+
+    Drilling --> Photo{Фото аномалии}
+    Photo -- "нет камеры" --> NoCam[Тост: Нет фотоаппарата]
+    Photo -- "плёно нет" --> NoFilm[Тост: Плёнка закончилась]
+    Photo -- OK --> AnomalyGone[Аномалия исчезает]
+
+    NoCam --> Drilling
+    NoFilm --> Drilling
+    AnomalyGone --> Drilling
+
+    Drilling --> Done{Бур завершён}
+    Done -- Да --> Return[Возврат ко входу]
+    Return --> End([Вердикт миссии])
+    Done -- "Время вышло" --> Fail([Провал экспедиции])
+
+    Fail --> Hub

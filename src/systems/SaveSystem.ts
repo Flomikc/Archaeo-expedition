@@ -107,8 +107,11 @@ export class SaveSystem {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
-      // localStorage переполнен или недоступен (приватный режим)
-      console.error("[SaveSystem.save] Не удалось сохранить:", e);
+      // QuotaExceededError, SecurityError или иная проблема localStorage.
+      // Логируем — игра продолжает работать, но прогресс не сохранён.
+      console.error("[SaveSystem.save] Ошибка сохранения:", e);
+      // Не бросаем SaveError наружу: сцены не готовы его ловить,
+      // graceful degradation важнее.
     }
   }
 
