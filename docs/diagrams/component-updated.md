@@ -68,3 +68,12 @@ flowchart LR
 
     HUD -.отображает.-> HUB
     HUD -.отображает.-> EXP
+```
+
+## Что нового
+
+- **`errors.ts`** вынесен как отдельный компонент ядра.
+- **Все системы** зависят от `errors.ts`, но используют разные классы:
+  - `ShopSystem` → `ValidationError`, `ShopError`
+  - `ArtifactSystem` → `ArtifactError`
+  - `SaveSystem`, `LevelGenerator` → пока не используют, зависимость зарезервирована
