@@ -1,6 +1,6 @@
 import { SHOP_ITEMS, ShopItem } from "../data/ShopData";
 import { SaveSystem } from "./SaveSystem";
-import { ValidationError } from "./errors";
+import { ValidationError, ShopError } from "./errors";
 
 export interface PurchaseResult {
   ok: boolean;
@@ -18,9 +18,13 @@ export class ShopSystem {
     return save.purchasedItems[id] ?? 0;
   }
 
+  /**
+   * Проверяет, можно ли купить предмет.
+   * Возвращает бизнес-результат (не исключение) — это ожидаемая ситуация.
+   */
   static canBuy(item: ShopItem): PurchaseResult {
     if (!item || !item.id) {
-      return { ok: false, reason: "Некорректный предмет" };
+      throw new ValidationError("canBuy: некорректный предмет", { item });
     }
     const save = SaveSystem.get();
     const owned = save.purchasedItems[item.id] ?? 0;
@@ -32,14 +36,16 @@ export class ShopSystem {
   }
 
   static buy(id: string): PurchaseResult {
+    // Программная ошибка: пустой ID никогда не должен попадать сюда
+    if (!id) throw new ValidationError("buy: не передан ID предмета");
+
+    // Несогласованность данных: ID передан, но предмет не найден
+    const item = SHOP_ITEMS.find((i) => i.id === id);
+    if (!item) throw new ShopError("buy: предмет не найден в SHOP_ITEMS", { id });
+
     try {
-      if (!id) throw new ValidationError("Не передан ID предмета");
-
-      const item = SHOP_ITEMS.find((i) => i.id === id);
-      if (!item) return { ok: false, reason: "Предмет не найден" };
-
       const can = this.canBuy(item);
-      if (!can.ok) return can;
+      if (!can.ok) return can; // бизнес-отказ, не исключение
 
       const save = SaveSystem.get();
       save.coins -= item.price;
@@ -48,8 +54,9 @@ export class ShopSystem {
 
       return { ok: true };
     } catch (e) {
-      console.error("[ShopSystem.buy] Ошибка:", e);
-      return { ok: false, reason: "Внутренняя ошибка магазина" };
+      // SaveSystem.save сам ловит переполнение, но если что-то пробросилось — логируем
+      console.error("[ShopSystem.buy] Непредвиденная ошибка:", e);
+      throw e;
     }
   }
 
