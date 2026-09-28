@@ -32,15 +32,33 @@
 
 ## Классы исключений
 
-Все классы — в `src/systems/errors.ts`. Наследуются от `GameError`, у каждой свой код:
+Файл: `src/systems/errors.ts`. Иерархия: `GameError` → 5 специализированных классов.
 
-| Класс | Код | Когда |
-|-------|-----|-------|
-| `SaveError` | `SAVE_ERROR` | Проблемы сохранений |
-| `ValidationError` | `VALIDATION_ERROR` | Ошибки валидации ввода |
-| `ShopError` | `SHOP_ERROR` | Ошибки магазина |
-| `ArtifactError` | `ARTIFACT_ERROR` | Ошибки артефактов |
-| `GenerationError` | `GENERATION_ERROR` | Ошибки генерации уровня |
+### Реально используются
+
+| Класс | Код | Где бросается | Когда |
+|-------|-----|---------------|-------|
+| `ValidationError` | `VALIDATION_ERROR` | `ShopSystem.buy`, `ShopSystem.canBuy` | Некорректный или пустой ID |
+| `ShopError` | `SHOP_ERROR` | `ShopSystem.buy` | ID есть, но товара нет в базе |
+| `ArtifactError` | `ARTIFACT_ERROR` | `ArtifactSystem.getPrice`, `mergeFirstOfKind` | Некорректный индекс артефакта |
+
+### Зарезервированы под фазу 2
+
+| Класс | Код | Планируемое использование |
+|-------|-----|---------------------------|
+| `SaveError` | `SAVE_ERROR` | Облачные сохранения через SDK Яндекс Игр |
+| `GenerationError` | `GENERATION_ERROR` | Расширенная генерация (вторая локация) |
+
+### Что НЕ бросает исключения
+
+Бизнес-отказы возвращаются как `{ ok: false, reason }`:
+
+| Ситуация | Где | Возврат |
+|----------|-----|---------|
+| Мало монет | `ShopSystem.buy` | `{ ok: false, reason: "Мало монет" }` |
+| Уже куплено | `ShopSystem.buy` | `{ ok: false, reason: "Уже куплено" }` |
+| Нужно 3 артефакта | `ArtifactSystem.mergeFirstOfKind` | `{ ok: false, reason: "Нужно 3..." }` |
+| Артефакт не отреставрирован | `ArtifactSystem.mergeFirstOfKind` | `{ ok: false, reason: "Сначала реставрируйте" }` |
 
 ## Реализация обработки
 
