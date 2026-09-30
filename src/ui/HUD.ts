@@ -247,6 +247,7 @@ export class HUD {
       btn.textContent = maxed ? "Куплено" : "Купить";
       btn.disabled = !!maxed;
       btn.onclick = () => {
+        btn.disabled = true; // защита от двойного клика
         this.shopBuyHandler?.(item.id);
       };
 
