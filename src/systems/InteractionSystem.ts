@@ -17,6 +17,10 @@ export class InteractionSystem {
     private readonly camera: UniversalCamera
   ) {}
 
+  /**
+   * Регистрирует интерактивный объект в сцене.
+   * @param item - объект с мешем, подсказкой, дистанцией и обработчиком.
+   */
   register(item: Interactable): void {
     this.items.push(item);
   }
@@ -30,6 +34,9 @@ export class InteractionSystem {
     this.clear();
   }
 
+  /**
+   * Обновляет текущую цель взаимодействия. Вызывается каждый кадр.
+   */
   update(): void {
     this.current = this.findTarget();
   }
@@ -38,6 +45,10 @@ export class InteractionSystem {
     return this.current ? this.current.hint : null;
   }
 
+  /**
+   * Пытается взаимодействовать с текущей целью.
+   * @returns true, если взаимодействие произошло.
+   */
   interact(): boolean {
     if (!this.current) return false;
     this.current.onInteract();
