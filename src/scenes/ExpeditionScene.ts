@@ -38,6 +38,8 @@ const MAX_ANOMALIES = 4;
 const PHOTO_RANGE = 12;
 const START_PHOTOS = 8;
 const PIT_DEPTH = 2.5;
+const PLAYER_EYE_HEIGHT = 1.7;
+const PIT_ENTRY_RADIUS = 0.6;
 
 export class ExpeditionScene {
   readonly scene: Scene;
@@ -120,7 +122,7 @@ export class ExpeditionScene {
     this.player = new Player({
       scene: this.scene,
       canvas: this.canvas,
-      position: new Vector3(startNode.centerX, startFloorY + 1.7, startNode.centerZ),
+      position: new Vector3(startNode.centerX, startFloorY + PLAYER_EYE_HEIGHT, startNode.centerZ),
     });
     this.player.enableFlashlight();
 
@@ -193,32 +195,48 @@ export class ExpeditionScene {
   update(dt: number): void {
     if (this.finished) return;
 
+    if (!this.updateTimer(dt)) return;
+
+    if (this.shotCooldown > 0) this.shotCooldown -= dt;
+
+    this.updatePlayer(dt);
+    this.updateDrill(dt);
+    this.updateAnomalies(dt);
+    this.updateTorches();
+    this.checkTrapDamage(dt);
+  }
+
+  private updateTimer(dt: number): boolean {
     this.timeLeft -= dt;
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
       this.hud.setTimer(0);
       this.finishMission(false);
-      return;
+      return false;
     }
     this.hud.setTimer(this.timeLeft);
+    return true;
+  }
 
-    if (this.shotCooldown > 0) this.shotCooldown -= dt;
-
+  private updatePlayer(dt: number): void {
     this.player.update(dt);
     this.cameraItem?.update(dt);
     this.interaction.update();
     this.hud.setHint(this.interaction.getHint());
     this.atmosphere.update(dt);
+  }
 
+  private updateDrill(dt: number): void {
     this.drill.update(dt);
-    if (this.drill.isActive) {
-      this.hud.setDrillProgress(true, this.drill.progress);
-      if (this.drill.isComplete && !this.drillCompleted) {
-        this.drillCompleted = true;
-        this.onDrillComplete();
-      }
+    if (!this.drill.isActive) return;
+    this.hud.setDrillProgress(true, this.drill.progress);
+    if (this.drill.isComplete && !this.drillCompleted) {
+      this.drillCompleted = true;
+      this.onDrillComplete();
     }
+  }
 
+  private updateAnomalies(dt: number): void {
     if (this.drill.isActive && !this.drill.isComplete) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0 && this.anomalies.length < MAX_ANOMALIES) {
@@ -226,13 +244,6 @@ export class ExpeditionScene {
         this.spawnTimer = SPAWN_INTERVAL;
       }
     }
-
-    const t = performance.now() / 1000;
-    for (let i = 0; i < this.torches.length; i++) {
-      this.torches[i].intensity = 0.7 + Math.sin(t * 3.1 + i * 1.7) * 0.2;
-    }
-
-    this.checkTrapDamage(dt);
 
     const playerPosition = this.player.camera.position;
     for (const anomaly of [...this.anomalies]) {
@@ -246,6 +257,13 @@ export class ExpeditionScene {
           return;
         }
       }
+    }
+  }
+
+  private updateTorches(): void {
+    const t = performance.now() / 1000;
+    for (let i = 0; i < this.torches.length; i++) {
+      this.torches[i].intensity = 0.7 + Math.sin(t * 3.1 + i * 1.7) * 0.2;
     }
   }
 
