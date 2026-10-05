@@ -185,18 +185,28 @@ export class HUD {
       };
     });
   }
-
+  
+  /**
+   * Переключает активную вкладку ноутбука.
+   *
+   * Порядок операций важен: сначала показываем новую панель,
+   * потом скрываем остальные. Так между кадрами не возникает
+   * пустого пространства (фикс BR-04).
+   */
   setLaptopTab(tabId: string): void {
     const tabs = this.laptopMenu.querySelectorAll<HTMLButtonElement>(".laptop-tab[data-tab]");
     tabs.forEach((tab) => {
       tab.classList.toggle("active", tab.dataset.tab === tabId);
     });
+
+    const newPanel = this.laptopMenu.querySelector<HTMLDivElement>(`#tab-${tabId}`);
+    if (newPanel) newPanel.classList.remove("hidden");
+
     const panels = this.laptopMenu.querySelectorAll<HTMLDivElement>(".tab-panel");
     panels.forEach((panel) => {
-      panel.classList.toggle("hidden", panel.id !== `tab-${tabId}`);
+      if (panel !== newPanel) panel.classList.add("hidden");
     });
   }
-
   showLaptop(coins: number): void {
     this.laptopCoins.textContent = String(coins);
     this.laptopMenu.classList.remove("hidden");
