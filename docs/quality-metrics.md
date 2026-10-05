@@ -106,9 +106,11 @@
 
 | Файл | Что показывает | Где сделано |
 |------|---------------|-------------|
-| `coverage.png` | Отчёт покрытия (79.25%) | VS Code, терминал |
+| `coverage.png` | Отчёт покрытия (86.61%) | VS Code, терминал |
 | `loc.png` | LOC по файлам | VS Code, терминал |
 | `build.png` | Размер бандла после `vite build` | VS Code, терминал |
 | `network.png` | Размер ресурсов в браузере | DevTools → Network |
-| `console.png` | Ошибки в консоли (1) | DevTools → Console |
+| `console.png` | Ошибки в консоли (0) | DevTools → Console |
 | `lighthouse.png` | Оценка производительности | DevTools → Lighthouse |
+| `mobile-320px.png` | Адаптивность | DevTools → Device Toolbar |
+| `git-graph.png` | История коммитов | VS Code, терминал |
