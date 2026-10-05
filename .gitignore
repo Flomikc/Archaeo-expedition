@@ -5,3 +5,7 @@ dist/
 .vscode/
 *.tmp
 .env
+
+# Отчёты о покрытии — генерируются автоматически
+tests/coverage/
+coverage/
