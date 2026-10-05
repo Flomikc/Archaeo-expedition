@@ -32,7 +32,7 @@ export interface ExpeditionSceneOptions {
   onRestart: () => void;
 }
 
-const MISSION_TIME = 420;
+const MISSION_TIME = 480;
 const SPAWN_INTERVAL = 25;
 const MAX_ANOMALIES = 4;
 const PHOTO_RANGE = 12;
