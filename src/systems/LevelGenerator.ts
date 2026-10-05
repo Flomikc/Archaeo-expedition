@@ -662,25 +662,27 @@ export class LevelGenerator {
 
     const tex = new DynamicTexture("stoneTex", { width: 256, height: 256 }, scene, false);
     const ctx = tex.getContext();
-    ctx.fillStyle = "#7a6a4c";
-    ctx.fillRect(0, 0, 256, 256);
-    ctx.strokeStyle = "#4c3e28";
-    ctx.lineWidth = 3;
-    for (let y = 0; y < 256; y += 32) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(256, y);
-      ctx.stroke();
-      const offset = (y / 32) % 2 === 0 ? 0 : 40;
-      for (let x = offset; x < 256; x += 80) {
+    if (ctx) {
+      ctx.fillStyle = "#7a6a4c";
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.strokeStyle = "#4c3e28";
+      ctx.lineWidth = 3;
+      for (let y = 0; y < 256; y += 32) {
         ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, y + 32);
+        ctx.moveTo(0, y);
+        ctx.lineTo(256, y);
         ctx.stroke();
+        const offset = (y / 32) % 2 === 0 ? 0 : 40;
+        for (let x = offset; x < 256; x += 80) {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + 32);
+          ctx.stroke();
+        }
       }
+      tex.update();
+      stone.diffuseTexture = tex;
     }
-    tex.update();
-    stone.diffuseTexture = tex;
 
     const darkStone = new StandardMaterial("darkStone", scene);
     darkStone.diffuseColor = new Color3(0.3, 0.24, 0.18);
