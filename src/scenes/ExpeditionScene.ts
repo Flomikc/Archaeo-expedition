@@ -18,7 +18,7 @@ import { Drill } from "../entities/Drill";
 import { Player } from "../entities/Player";
 import { Atmosphere } from "../systems/Atmosphere";
 import { InteractionSystem } from "../systems/InteractionSystem";
-import { LevelData, LevelGenerator, PathNode } from "../systems/LevelGenerator";
+import { GridLevelData, GridLevelGenerator } from "../systems/GridLevelGenerator";
 import { SaveSystem } from "../systems/SaveSystem";
 import { ShopSystem } from "../systems/ShopSystem";
 import { HUD } from "../ui/HUD";
@@ -37,9 +37,8 @@ const SPAWN_INTERVAL = 25;
 const MAX_ANOMALIES = 4;
 const PHOTO_RANGE = 12;
 const START_PHOTOS = 8;
-const PIT_DEPTH = 2.5;
+const PIT_DEPTH = 3.0;
 const PLAYER_EYE_HEIGHT = 1.7;
-const PIT_ENTRY_RADIUS = 0.6;
 
 export class ExpeditionScene {
   readonly scene: Scene;
@@ -49,7 +48,7 @@ export class ExpeditionScene {
   private readonly canvas: HTMLCanvasElement;
   private readonly engine: Engine;
 
-  private readonly level: LevelData;
+  private readonly level: GridLevelData;
   private readonly player: Player;
   private readonly drill: Drill;
   private readonly interaction: InteractionSystem;
@@ -78,6 +77,12 @@ export class ExpeditionScene {
       this.tryPhoto();
     } else if (e.code === "KeyH") {
       this.tryMedkit();
+    } else if (e.code === "KeyL") {
+      this.player.toggleFlashlight();
+      this.hud.showToast(
+        this.player.isFlashlightOn() ? "Фонарик включён" : "Фонарик выключен",
+        1200
+      );
     }
   };
 
@@ -97,58 +102,96 @@ export class ExpeditionScene {
     this.scene.collisionsEnabled = true;
 
     this.atmosphere = new Atmosphere(this.scene);
-    this.atmosphere.apply("pyramid");
+    // ВРЕМЕННО: пирамида без тумана, без пост-обработки.
+    this.atmosphere.apply("hub");   // ← используем лёгкий пресет как в фуре
+    this.scene.fogMode = Scene.FOGMODE_NONE;
 
     const ambient = new HemisphericLight("expAmbient", new Vector3(0, 1, 0), this.scene);
-    ambient.intensity = 0.18;
-    ambient.diffuse = new Color3(0.55, 0.45, 0.32);
-    ambient.groundColor = new Color3(0.08, 0.06, 0.04);
+    ambient.intensity = 0.45;                        // как в фуре
+    ambient.diffuse = new Color3(0.9, 0.85, 0.8);    // как в фуре
+    ambient.groundColor = new Color3(0.18, 0.18, 0.22);
 
-    // Бонусы магазина
     const bonuses = ShopSystem.getRuntimeBonuses();
     this.hasCamera = SaveSystem.get().hasCamera;
     this.photos = START_PHOTOS + bonuses.startPhotosBonus;
     this.medkits = bonuses.medkitCount;
 
-    // Генерация уровня
+    // ── Генерация уровня ────────────────────────────────────
     const save = SaveSystem.get();
     const seed = save.levelSeed ?? (Date.now() & 0xffffffff);
     SaveSystem.setLevelSeed(seed);
-    this.level = new LevelGenerator().build(this.scene, seed);
+    this.level = new GridLevelGenerator().build(this.scene, {
+      size: "small",
+      seed,
+    });
 
-    // Игрок
-    const startNode = this.level.start;
-    const startFloorY = startNode.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+    // ── Игрок ───────────────────────────────────────────────
+    const startRoom = this.level.start;
     this.player = new Player({
       scene: this.scene,
       canvas: this.canvas,
-      position: new Vector3(startNode.centerX, startFloorY + PLAYER_EYE_HEIGHT, startNode.centerZ),
+      position: new Vector3(
+        startRoom.centerX,
+        startRoom.floorY + PLAYER_EYE_HEIGHT,
+        startRoom.centerZ
+      ),
     });
     this.player.enableFlashlight();
+    this.hud.showToast("L — фонарик", 3000);
 
-    // Фотоаппарат — если он есть в сохранении
+    // Лампа на игроке — как hubLamp в фуре.
+    // Даёт постоянный свет вокруг игрока, чтобы стены всегда были видны.
+    const playerLamp = new PointLight("expPlayerLamp", new Vector3(0, 2.7, 0), this.scene);
+    playerLamp.intensity = 0.7;
+    playerLamp.diffuse = new Color3(1, 0.95, 0.85);
+    playerLamp.range = 14;
+    // Привязываем к камере игрока, чтобы летела за ним
+    playerLamp.parent = this.player.camera;
+    playerLamp.position.set(0, 0.8, 0);
+
+    // ── Камера-предмет ──────────────────────────────────────
     if (this.hasCamera) {
       this.cameraItem = new CameraItem(this.scene, new Vector3(0, -10, 0));
       this.cameraItem.pickup(this.player.camera);
     }
 
-    // Бур — с апгрейдом скорости
-    const goalNode = this.level.goal;
-    const goalFloorY = goalNode.cell.floor * LevelGenerator.FLOOR_HEIGHT;
+    // ── Бур (в goal-комнате, на дне ямы) ────────────────────
+    const goalRoom = this.level.goal;
     this.drill = new Drill(
       this.scene,
-      new Vector3(goalNode.centerX, goalFloorY - PIT_DEPTH + 0.5, goalNode.centerZ),
+      new Vector3(
+        goalRoom.centerX,
+        goalRoom.floorY - PIT_DEPTH + 0.5,
+        goalRoom.centerZ
+      ),
       bonuses.drillSpeedMultiplier
     );
 
-    // Маркер выхода
+    // ── Маркер выхода (в start-комнате) ─────────────────────
     this.exitMarker = this.createExitMarker(
-      new Vector3(startNode.centerX, startFloorY, startNode.centerZ)
+      new Vector3(startRoom.centerX, startRoom.floorY, startRoom.centerZ)
     );
     this.exitMarker.setEnabled(false);
 
-    this.placeTorches();
+    // ── DEBUG: убираем все лишние источники света ────────────
+    // Оставляем только ambient + фонарик.
+    // Удаляем: drillMoon, drillFill (создаются в drill blueprint'е),
+    // torch* (создаются в placeTorches), torchLight (в room-kit).
+    // После проверки фонарика — верни как было.
+    this.placeTorches();   // вызов оставим, но placeTorches() сам себя отключит
 
+    // Удаляем все источники, кроме ambient и фонарика
+    for (const light of [...this.scene.lights]) {
+      if (light.name === "expAmbient") continue;
+      if (light.name === "flashlight") continue;
+      light.dispose();
+    }
+    console.log(
+      "[DEBUG] Осталось источников:",
+      this.scene.lights.map((l) => l.name)
+    );
+
+    // ── Интеракции ──────────────────────────────────────────
     this.interaction = new InteractionSystem(this.scene, this.player.camera);
     this.interaction.register({
       mesh: this.drill.interactionMesh,
@@ -165,6 +208,7 @@ export class ExpeditionScene {
       onInteract: () => this.finishMission(true),
     });
 
+    // ── HUD ─────────────────────────────────────────────────
     this.hud.setHudMode("expedition");
     this.hud.showHud(true);
     this.hud.setHp(this.hp);
@@ -179,7 +223,21 @@ export class ExpeditionScene {
     if (this.medkits > 0) {
       this.hud.showToast(`Аптечек: ${this.medkits} (клавиша H)`, 2500);
     }
-
+// ── ВРЕМЕННО: дебаг из консоли ──────────────────────────────
+(window as unknown as { __expDebug: unknown }).__expDebug = {
+  scene: this.scene,
+  player: this.player,
+  flashlight: () => {
+    const lights = this.scene.lights;
+    return lights.map((l) => ({
+      name: l.name,
+      type: l.getClassName(),
+      enabled: l.isEnabled(),
+      intensity: "intensity" in l ? (l as { intensity: number }).intensity : null,
+      range: "range" in l ? (l as { range: number }).range : null,
+    }));
+  },
+};
     window.addEventListener("keydown", this.onKeyDown);
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
   }
@@ -205,6 +263,19 @@ export class ExpeditionScene {
     this.updateTorches();
     this.checkTrapDamage(dt);
   }
+
+  dispose(): void {
+    window.removeEventListener("keydown", this.onKeyDown);
+    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
+    for (const anomaly of this.anomalies) anomaly.dispose();
+    this.anomalies = [];
+    this.cameraItem?.dispose();
+    this.atmosphere.dispose();
+    this.player.dispose();
+    this.scene.dispose();
+  }
+
+  // ============================================================= update
 
   private updateTimer(dt: number): boolean {
     this.timeLeft -= dt;
@@ -267,15 +338,26 @@ export class ExpeditionScene {
     }
   }
 
-  dispose(): void {
-    window.removeEventListener("keydown", this.onKeyDown);
-    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
-    for (const anomaly of this.anomalies) anomaly.dispose();
-    this.anomalies = [];
-    this.cameraItem?.dispose();
-    this.atmosphere.dispose();
-    this.player.dispose();
-    this.scene.dispose();
+  private checkTrapDamage(dt: number): void {
+    const pos = this.player.camera.position;
+    for (const room of this.level.rooms) {
+      if (room.blueprint.category !== "trap") continue;
+
+      // «Ловушка» срабатывает, только если игрок провалился в яму:
+      // близко к центру комнаты и по Y ниже уровня пола.
+      const dx = pos.x - room.centerX;
+      const dz = pos.z - room.centerZ;
+      const inX = Math.abs(dx) < room.sizeX / 2 - 1;
+      const inZ = Math.abs(dz) < room.sizeZ / 2 - 1;
+      const lowEnough = pos.y < room.floorY + 0.5;
+
+      if (inX && inZ && lowEnough) {
+        this.hp = Math.max(0, this.hp - 8 * dt);
+        this.hud.setHp(this.hp);
+        if (this.hp <= 0) this.finishMission(false);
+        return;
+      }
+    }
   }
 
   // ============================================================= helpers
@@ -312,52 +394,28 @@ export class ExpeditionScene {
   }
 
   private placeTorches(): void {
-    const mat = new StandardMaterial("torchMat", this.scene);
-    mat.diffuseColor = new Color3(0.3, 0.15, 0.05);
-    mat.emissiveColor = new Color3(0.6, 0.3, 0.05);
+    // ── DEBUG: факелы отключены, чтобы проверить фонарик ──
+    return;
+    //const mat = new StandardMaterial("torchMat", this.scene);
+    //mat.diffuseColor = new Color3(0.3, 0.15, 0.05);
+    //mat.emissiveColor = new Color3(0.6, 0.3, 0.05);
 
-    const nodes = this.level.nodes;
-    for (let idx = 2; idx < nodes.length - 1; idx += 3) {
-      const node = nodes[idx];
-      const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
-      const pos = new Vector3(node.centerX, floorY + 2.7, node.centerZ);
+    //const rooms = this.level.rooms;
+    //for (let idx = 2; idx < rooms.length - 1; idx += 3) {
+      //const room = rooms[idx];
+      //const pos = new Vector3(room.centerX, room.floorY + 2.7, room.centerZ);
 
-      const light = new PointLight(`torch${idx}`, pos, this.scene);
-      light.diffuse = new Color3(1, 0.55, 0.2);
-      light.intensity = 0.85;
-      light.range = 12;
-      this.torches.push(light);
+      //const light = new PointLight(`torch${idx}`, pos, this.scene);
+      //light.diffuse = new Color3(1, 0.55, 0.2);
+      //light.intensity = 0.85;
+      //light.range = 12;
+      //this.torches.push(light);
 
-      const flame = MeshBuilder.CreateSphere(`flame${idx}`, { diameter: 0.28 }, this.scene);
-      flame.position.copyFrom(pos);
-      flame.material = mat;
-      flame.isPickable = false;
-    }
-  }
-
-  private checkTrapDamage(dt: number): void {
-    const pos = this.player.camera.position;
-    for (const node of this.level.nodes) {
-      if (node.type !== "trap") continue;
-
-      const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
-      const offset = Math.min(node.sizeX, node.sizeZ) * 0.3;
-      const pitX = (node.doors.n || node.doors.s) ? node.centerX + offset : node.centerX;
-      const pitZ = (node.doors.w || node.doors.e) ? node.centerZ + offset : node.centerZ;
-
-      const dx = pos.x - pitX;
-      const dz = pos.z - pitZ;
-      const inX = Math.abs(dx) < 1.6;
-      const inZ = Math.abs(dz) < 1.6;
-      const lowEnough = pos.y < floorY + 0.6;
-
-      if (inX && inZ && lowEnough) {
-        this.hp = Math.max(0, this.hp - 8 * dt);
-        this.hud.setHp(this.hp);
-        if (this.hp <= 0) this.finishMission(false);
-        return;
-      }
-    }
+      //const flame = MeshBuilder.CreateSphere(`flame${idx}`, { diameter: 0.28 }, this.scene);
+      //flame.position.copyFrom(pos);
+      //flame.material = mat;
+      //flame.isPickable = false;
+    //}
   }
 
   private createExitMarker(position: Vector3): Mesh {
@@ -394,61 +452,57 @@ export class ExpeditionScene {
 
   private spawnAnomaly(): void {
     const playerPosition = this.player.camera.position;
-    const nodes = this.level.nodes;
+    const rooms = this.level.rooms;
 
-    // Определяем текущий этаж игрока: floor = round(y / FLOOR_HEIGHT)
     const playerFloor = Math.round(
-      (playerPosition.y - 1.7) / LevelGenerator.FLOOR_HEIGHT
+      (playerPosition.y - PLAYER_EYE_HEIGHT) / this.level.floorHeight
     );
 
-    // Ищем узлы подальше от игрока, желательно на том же этаже
-    let bestNode: PathNode | null = null;
+    let bestRoom: { room: typeof rooms[number] } | null = null;
     let bestScore = -1;
 
-    for (const node of nodes) {
-      if (node.isStart || node.isGoal) continue;
+    for (const room of rooms) {
+      if (room.isStart || room.isGoal) continue;
 
-      const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
-      const dx = node.centerX - playerPosition.x;
-      const dz = node.centerZ - playerPosition.z;
-      const dy = floorY - playerPosition.y;
+      const dx = room.centerX - playerPosition.x;
+      const dz = room.centerZ - playerPosition.z;
+      const dy = room.floorY - playerPosition.y;
       const dist3D = Math.sqrt(dx * dx + dz * dz + dy * dy);
 
       if (dist3D < 8) continue;
 
-      // Приоритет: тот же этаж → +100 к скору. Чем дальше — тем лучше.
-      const sameFloor = node.cell.floor === playerFloor;
+      const sameFloor = room.cell.floor === playerFloor;
       const score = dist3D + (sameFloor ? 100 : 0);
 
       if (score > bestScore) {
         bestScore = score;
-        bestNode = node;
+        bestRoom = { room };
       }
     }
 
-    if (!bestNode) bestNode = nodes[Math.floor(nodes.length / 2)];
+    if (!bestRoom) {
+      bestRoom = { room: rooms[Math.floor(rooms.length / 2)] };
+    }
 
-    const floorY = bestNode.cell.floor * LevelGenerator.FLOOR_HEIGHT;
-    const position = new Vector3(bestNode.centerX, floorY, bestNode.centerZ);
+    const r = bestRoom.room;
+    const position = new Vector3(r.centerX, r.floorY, r.centerZ);
 
     this.anomalies.push(
       new Anomaly({
         scene: this.scene,
         position,
-        floor: bestNode.cell.floor,
-        floorHeight: LevelGenerator.FLOOR_HEIGHT,
-        pickPatrolPoint: () => this.pickPatrolPoint(bestNode!.cell.floor),
+        floor: r.cell.floor,
+        floorHeight: this.level.floorHeight,
+        pickPatrolPoint: () => this.pickPatrolPoint(r.cell.floor),
       })
     );
   }
 
   private pickPatrolPoint(floor: number): Vector3 {
-    // Патрулирует только в пределах своего этажа
-    const sameFloorNodes = this.level.nodes.filter((n) => n.cell.floor === floor);
-    const pool = sameFloorNodes.length > 0 ? sameFloorNodes : this.level.nodes;
-    const node = pool[Math.floor(Math.random() * pool.length)];
-    const floorY = node.cell.floor * LevelGenerator.FLOOR_HEIGHT;
-    return new Vector3(node.centerX, floorY, node.centerZ);
+    const sameFloorRooms = this.level.rooms.filter((r) => r.cell.floor === floor);
+    const pool = sameFloorRooms.length > 0 ? sameFloorRooms : this.level.rooms;
+    const r = pool[Math.floor(Math.random() * pool.length)];
+    return new Vector3(r.centerX, r.floorY, r.centerZ);
   }
 
   private takePhoto(): void {
@@ -520,8 +574,6 @@ export class ExpeditionScene {
 
       SaveSystem.addCoins(totalReward);
 
-      // === Добыча: 1 находка с локации (common/uncommon) ===
-      //     + 1 извлечённая буром (rare/epic) ===
       const siteDef = rollArtifact("egypt", "site");
       const drillDef = rollArtifact("egypt", "drill");
 

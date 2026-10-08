@@ -56,6 +56,7 @@ export class DesertScene {
     if (e.code !== "KeyE") return;
     if (this.menuOpen || this.lockpick.isOpen()) return;
     this.interaction.interact();
+
   };
 
   constructor(options: DesertSceneOptions) {

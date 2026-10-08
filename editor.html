@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D-редактор комнат</title>
+    <link rel="stylesheet" href="/sandbox/editor/styles.css" />
+  </head>
+  <body>
+    <canvas id="editor-canvas"></canvas>
+
+    <!-- ══════════ ЛЕВАЯ ПАНЕЛЬ: палитра + список ══════════ -->
+    <aside id="panel-left">
+      <header class="panel-header">
+        <h1>3D-редактор</h1>
+        <p class="subtitle">Археологические экспедиции</p>
+      </header>
+
+      <!-- Загрузка существующей комнаты -->
+    <section class="panel-section">
+    <h2>Загрузить комнату</h2>
+    <label class="field">
+        <span>Blueprint по ID</span>
+        <select id="blueprint-loader">
+        <option value="">— выбери комнату —</option>
+        </select>
+    </label>
+    <p class="hint">
+        Загрузит существующий blueprint в редактор как набор объектов.
+        Текущее содержимое будет очищено.
+    </p>
+    </section>
+
+      <!-- Палитра -->
+      <section class="panel-section">
+        <h2>Палитра объектов</h2>
+        <div id="palette-list"></div>
+        <p class="hint">
+          Клик → объект появится в центре комнаты.
+          Дальше двигай гизмо или правь числа справа.
+        </p>
+      </section>
+
+      <!-- Список объектов в комнате -->
+      <section class="panel-section">
+        <h2>
+          Объекты в комнате
+          <span class="badge"><span id="object-count">0</span></span>
+        </h2>
+        <div id="object-list" class="object-list"></div>
+      </section>
+
+      <!-- Общие действия -->
+      <section class="panel-section">
+        <h2>Действия</h2>
+        <button id="btn-clear-all" class="danger">Очистить всё</button>
+        <button id="btn-reset-camera">Сбросить камеру</button>
+      </section>
+    </aside>
+
+    <!-- ══════════ ПРАВАЯ ПАНЕЛЬ: инспектор ══════════ -->
+    <aside id="panel-right" class="disabled">
+      <header class="panel-header">
+        <h2 id="inspector-title">Ничего не выбрано</h2>
+      </header>
+
+      <section class="panel-section">
+        <div id="inspector-body"></div>
+      </section>
+
+      <section class="panel-section">
+        <h2>Операции</h2>
+        <button id="btn-duplicate">Дублировать</button>
+        <button id="btn-delete" class="danger">Удалить</button>
+      </section>
+
+      <!-- Экспорт -->
+      <section class="panel-section">
+        <h2>Экспорт комнаты</h2>
+        <label class="field">
+          <span>ID комнаты</span>
+          <input
+            id="room-id"
+            type="text"
+            value="untitled"
+            placeholder="corner_ne, hall, ..."
+          />
+        </label>
+        <button id="btn-export" class="primary">Экспортировать JSON</button>
+        <p class="hint">
+          Скопируй JSON и пришли разработчику — он превратит его в blueprint.
+        </p>
+      </section>
+    </aside>
+
+    <!-- ══════════ Статус-бар ══════════ -->
+    <div id="status-bar">
+      <span>ЛКМ — выделить · ПКМ — панорама · колесо — зум</span>
+      <span>Del — удалить · Ctrl+D — дублировать</span>
+    </div>
+
+    <!-- ══════════ Модальное окно экспорта ══════════ -->
+    <div id="export-modal" class="hidden">
+      <div class="modal-panel">
+        <header>
+          <h2>Экспорт комнаты</h2>
+          <button id="btn-close-export" class="close-btn">✕</button>
+        </header>
+        <p class="subtitle">
+          Скопируй этот JSON и пришли — он содержит все объекты,
+          их координаты, повороты, размеры и материалы.
+        </p>
+        <textarea id="export-textarea" readonly></textarea>
+        <div class="modal-buttons">
+          <button id="btn-copy-export" class="primary">Скопировать</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/sandbox/editor/main.ts"></script>
+  </body>
+</html>

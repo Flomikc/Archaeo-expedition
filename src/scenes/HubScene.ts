@@ -60,6 +60,10 @@ export class HubScene {
       }
       return;
     }
+    if (e.code === "KeyL") {
+      this.player.toggleFlashlight();
+      return;
+    }
 
     if (this.laptopSystem.isBusy) return;
     if (e.code === "KeyE") this.interaction.interact();
@@ -106,6 +110,9 @@ export class HubScene {
       canvas: this.canvas,
       position: new Vector3(-1.2, 1.7, 0),
     });
+    // Фонарик в фуре выключен — там своя лампа, но игрок может включить.
+    const fl = this.player.enableFlashlight();
+    fl.setEnabled(false);
     this.player.camera.rotation.y = Math.PI / 2;
 
     // Фотоаппарат (world-модель на столе, если ещё не взят)

@@ -30,9 +30,7 @@ export class Atmosphere {
         break;
       case "pyramid":
         this.scene.clearColor = new Color4(0.02, 0.02, 0.025, 1);
-        this.scene.fogMode = Scene.FOGMODE_EXP2;
-        this.scene.fogDensity = 0.05;
-        this.scene.fogColor = new Color3(0.04, 0.035, 0.03);
+        this.scene.fogMode = Scene.FOGMODE_NONE;
         this.setupPipeline(0.55, 0.75, 0.12);
         this.spawnDust(new Vector3(20, 3, 20), 100, 14);
         break;

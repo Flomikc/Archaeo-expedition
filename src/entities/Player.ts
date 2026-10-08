@@ -142,25 +142,35 @@ import {
       }
     }
   
-    /** Создаёт фонарик, привязанный к камере. */
-    enableFlashlight(): SpotLight {
-      const light = new SpotLight(
-        "flashlight",
-        new Vector3(0, 0, 0),
-        new Vector3(0, 0, 1),
-        1.0,   // angle — перезапишется из настроек
-        2,     // exponent
-        this.scene
-      );
-      light.range = 15;
-      light.diffuse.set(1, 0.96, 0.85);
-      light.specular.set(0.4, 0.4, 0.4);
-      this.flashlight = light;
-  
-      // Применяем актуальные настройки
-      this.applySettings(SettingsSystem.get());
-      return light;
-    }
+  /** Создаёт фонарик, привязанный к камере. */
+  enableFlashlight(): SpotLight {
+    const light = new SpotLight(
+      "flashlight",
+      new Vector3(0, 0, 0),
+      new Vector3(0, 0, 1),
+      1.0,
+      2,
+      this.scene
+    );
+    light.range = 35;
+    light.diffuse.set(1, 0.96, 0.85);
+    light.specular.set(0.4, 0.4, 0.4);
+    this.flashlight = light;
+
+    this.applySettings(SettingsSystem.get());
+    return light;
+  }
+
+  /** Включить/выключить фонарик. */
+  toggleFlashlight(): void {
+    if (!this.flashlight) return;
+    this.flashlight.setEnabled(!this.flashlight.isEnabled());
+  }
+
+  /** Состояние фонарика. */
+  isFlashlightOn(): boolean {
+    return this.flashlight?.isEnabled() ?? false;
+  }
   
     update(dt: number): void {
       if (this.flashlight) {
@@ -250,8 +260,7 @@ import {
   
       if (this.flashlight) {
         const refAngle = 1.0;
-        const refIntensity = 1.5;
-        // Уже пучок → ярче; шире → тусклее (обратная зависимость).
+        const refIntensity = 3.0;   // было 1.5 — теперь ярче
         this.flashlight.angle = s.flashlight;
         this.flashlight.intensity = refIntensity * (refAngle / s.flashlight);
       }

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Песочница — комнаты и генератор</title>
+    <link rel="stylesheet" href="/sandbox/styles.css" />
+  </head>
+  <body>
+    <canvas id="sandbox-canvas"></canvas>
+
+    <!-- ══════════ ЛЕВАЯ ПАНЕЛЬ: настройки ══════════ -->
+    <aside id="panel-left">
+      <h1>Песочница</h1>
+
+      <!-- Режим -->
+      <section class="panel-block">
+        <h2>Режим</h2>
+        <div class="radio-row">
+          <label>
+            <input type="radio" name="mode" value="single" checked />
+            Одна комната
+          </label>
+          <label>
+            <input type="radio" name="mode" value="grid" />
+            Весь уровень
+          </label>
+        </div>
+      </section>
+
+      <!-- Режим «Одна комната» -->
+      <section class="panel-block" id="single-controls">
+        <h2>Комната</h2>
+        <label class="field">
+          <span>Blueprint</span>
+          <select id="blueprint-select"></select>
+        </label>
+
+        <label class="field">
+          <span>Размер X: <b id="size-x-value">14</b> м</span>
+          <input type="range" id="size-x" min="8" max="32" step="2" value="14" />
+        </label>
+
+        <label class="field">
+          <span>Размер Z: <b id="size-z-value">14</b> м</span>
+          <input type="range" id="size-z" min="8" max="32" step="2" value="14" />
+        </label>
+
+        <p class="hint">Двери blueprint'а фиксированы его сигнатурой.</p>
+      </section>
+
+      <!-- Режим «Весь уровень» -->
+      <section class="panel-block hidden" id="grid-controls">
+        <h2>Уровень</h2>
+        <label class="field">
+          <span>Seed</span>
+          <input type="number" id="seed-input" value="12345" />
+        </label>
+
+        <label class="field">
+          <span>Размер пирамиды</span>
+          <select id="size-select">
+            <option value="small">Малая (2–6 комнат/этаж)</option>
+            <option value="large" selected>Большая (7–20 комнат/этаж)</option>
+          </select>
+        </label>
+
+        <button id="btn-regenerate" class="primary">Сгенерировать</button>
+        <button id="btn-random-seed">Случайный seed</button>
+      </section>
+
+      <!-- Отображение -->
+      <section class="panel-block">
+        <h2>Отображение</h2>
+        <label class="check"><input type="checkbox" id="toggle-grid" checked /> Сетка земли</label>
+        <label class="check"><input type="checkbox" id="toggle-axes" checked /> Оси X/Y/Z</label>
+        <label class="check"><input type="checkbox" id="toggle-bounds" checked /> Wireframe комнаты</label>
+        <label class="check"><input type="checkbox" id="toggle-doors" checked /> Стрелки дверей</label>
+        <label class="check"><input type="checkbox" id="toggle-walls" checked /> Стены</label>
+        <label class="check"><input type="checkbox" id="toggle-floor" checked /> Пол</label>
+        <label class="check"><input type="checkbox" id="toggle-ceiling" checked /> Потолок</label>
+        <label class="check"><input type="checkbox" id="toggle-decor" checked /> Декор</label>
+      </section>
+
+      <!-- Камера -->
+      <section class="panel-block">
+        <h2>Камера</h2>
+        <button id="btn-reset-camera">Сбросить вид</button>
+        <p class="hint">
+          <b>WASD</b> — движение<br />
+          <b>Q / E</b> — вверх / вниз<br />
+          <b>Shift</b> — ускорение<br />
+          <b>ПКМ</b> — захват мыши<br />
+          <b>Esc</b> — отпустить
+        </p>
+      </section>
+    </aside>
+
+    <!-- ══════════ ПРАВАЯ ПАНЕЛЬ: инспектор ══════════ -->
+    <aside id="panel-right" class="hidden">
+      <button id="btn-close-inspector">✕</button>
+      <h2>Инспектор</h2>
+      <div id="inspector-body"></div>
+    </aside>
+
+    <!-- ══════════ Подсказка снизу ══════════ -->
+    <div id="status-bar">
+      <span id="status-mode">Одна комната</span>
+      <span id="status-count"></span>
+    </div>
+
+    <script type="module" src="/sandbox/main.ts"></script>
+  </body>
+</html>
