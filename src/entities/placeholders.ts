@@ -1,13 +1,15 @@
 import {
-    AbstractMesh,
-    Color3,
-    Mesh,
-    MeshBuilder,
-    Scene,
-    StandardMaterial,
-    TransformNode,
-    Vector3,
-  } from "@babylonjs/core";
+  AbstractMesh,
+  Color3,
+  Mesh,
+  MeshBuilder,
+  RenderTargetTexture,
+  Scene,
+  StandardMaterial,
+  Texture,
+  TransformNode,
+  Vector3,
+} from "@babylonjs/core";
   
   /**
    * Здесь собраны ВСЕ визуальные «болванки» для интерактивных объектов.
@@ -126,33 +128,134 @@ import {
   
     return { root, meshes: [body, lens, trigger] };
   }
-  
-  /** Фотоаппарат viewmodel (в руке игрока). */
-  export function createCameraViewModelPlaceholder(scene: Scene): PlaceholderResult {
-    const root = new TransformNode("cameraViewModelRoot", scene);
-  
-    const bodyMat = new StandardMaterial("ph_vmBody", scene);
-    bodyMat.diffuseColor = new Color3(0.18, 0.18, 0.2);
-    bodyMat.specularColor = new Color3(0.2, 0.2, 0.2);
-  
-    const lensMat = new StandardMaterial("ph_vmLens", scene);
-    lensMat.diffuseColor = new Color3(0.1, 0.12, 0.16);
-    lensMat.emissiveColor = new Color3(0.03, 0.05, 0.08);
-  
-    const body = MeshBuilder.CreateBox("vmBody", { width: 0.14, height: 0.09, depth: 0.08 }, scene);
-    body.material = bodyMat;
-    body.parent = root;
-    body.isPickable = false;
-  
-    const lens = MeshBuilder.CreateCylinder("vmLens", { height: 0.06, diameter: 0.05, tessellation: 10 }, scene);
-    lens.rotation.x = Math.PI / 2;
-    lens.position.set(0, 0, 0.06);
-    lens.material = lensMat;
-    lens.parent = root;
-    lens.isPickable = false;
-  
-    return { root, meshes: [body, lens] };
+/** Фотоаппарат viewmodel: корпус, объектив, экран, сетка поверх экрана. */
+export function createCameraViewModelPlaceholder(
+  scene: Scene,
+  screenTexture: Texture | RenderTargetTexture
+): PlaceholderResult {
+  const root = new TransformNode("cameraViewModelRoot", scene);
+
+  const bodyMat = new StandardMaterial("ph_vmBody", scene);
+  bodyMat.diffuseColor = new Color3(0.18, 0.18, 0.2);
+  bodyMat.specularColor = new Color3(0.2, 0.2, 0.2);
+  bodyMat.maxSimultaneousLights = 8;
+
+  const lensMat = new StandardMaterial("ph_vmLens", scene);
+  lensMat.diffuseColor = new Color3(0.1, 0.12, 0.16);
+  lensMat.emissiveColor = new Color3(0.03, 0.05, 0.08);
+  lensMat.maxSimultaneousLights = 8;
+
+  // ── Корпус ─────────────────────────────────────────────
+  const body = MeshBuilder.CreateBox("vmBody",
+    { width: 0.14, height: 0.09, depth: 0.08 }, scene);
+  body.material = bodyMat;
+  body.parent = root;
+  body.isPickable = false;
+
+  // ── Объектив ──────────────────────────────────────────
+  const lens = MeshBuilder.CreateCylinder("vmLens",
+    { height: 0.06, diameter: 0.05, tessellation: 10 }, scene);
+  lens.rotation.x = Math.PI / 2;
+  lens.position.set(0, 0, 0.06);
+  lens.material = lensMat;
+  lens.parent = root;
+  lens.isPickable = false;
+
+  // ── Экран через PBR unlit — надёжный способ показать RTT ─
+  // StandardMaterial с emissiveTexture капризничает: текстура
+  // может не привязаться или умножиться на чёрный emissiveColor.
+  // PBRMaterial.unlit = true показывает albedoTexture как есть.
+  // StandardMaterial работал с RTT — вернём его.
+  // PBR + unlit + separateCullingPass лагали, PBR убираем.
+  // StandardMaterial с emissiveTexture: RTT рендерится в неё
+  // один-в-один. Убеждаемся что текстура привязана явно.
+  const screenMat = new StandardMaterial("ph_vmScreen", scene);
+  screenMat.emissiveTexture = screenTexture;
+  screenMat.emissiveColor = new Color3(1, 1, 1);
+  screenMat.diffuseTexture = null;
+  screenMat.diffuseColor = new Color3(0, 0, 0);
+  screenMat.ambientColor = new Color3(0, 0, 0);
+  screenMat.specularColor = new Color3(0, 0, 0);
+  screenMat.disableLighting = true;
+  screenMat.backFaceCulling = false;
+  screenMat.maxSimultaneousLights = 8;
+
+  // RTT — это RenderTargetTexture. Она не «загружается» как файл,
+  // но для корректного отображения нужны правильные параметры
+  // выборки. Убеждаемся что нет мипмапов и фильтр линейный.
+  if (screenTexture instanceof RenderTargetTexture) {
+    screenTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
+    screenTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
   }
+
+  const screen = MeshBuilder.CreatePlane("vmScreen",
+    { width: 0.10, height: 0.065 }, scene);
+  screen.position.set(0, 0, -0.041);
+  screen.rotation.y = Math.PI;   // развёрнут назад к лицу
+  screen.material = screenMat;
+  screen.parent = root;
+  screen.isPickable = false;
+
+  // ── Сетка через SVG data URL ──────────────────────────
+  // encodeURIComponent вместо btoa — работает с любыми символами.
+  // Alpha сохраняется корректно.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<g stroke="rgba(232,201,138,0.45)" stroke-width="1" fill="none">
+<line x1="85.33" y1="0" x2="85.33" y2="256"/>
+<line x1="170.66" y1="0" x2="170.66" y2="256"/>
+<line x1="0" y1="85.33" x2="256" y2="85.33"/>
+<line x1="0" y1="170.66" x2="256" y2="170.66"/>
+</g>
+<circle cx="128" cy="128" r="42" fill="none" stroke="rgba(232,201,138,0.9)" stroke-width="2"/>
+<g stroke="rgba(232,201,138,0.9)" stroke-width="2">
+<line x1="110" y1="128" x2="122" y2="128"/>
+<line x1="134" y1="128" x2="146" y2="128"/>
+<line x1="128" y1="110" x2="128" y2="122"/>
+<line x1="128" y1="134" x2="128" y2="146"/>
+</g>
+<g stroke="rgba(232,201,138,0.95)" stroke-width="3" fill="none">
+<polyline points="14,36 14,14 36,14"/>
+<polyline points="220,14 242,14 242,36"/>
+<polyline points="14,220 14,242 36,242"/>
+<polyline points="220,242 242,242 242,220"/>
+</g>
+<circle cx="22" cy="22" r="5" fill="rgba(244,67,54,1)"/>
+</svg>`;
+
+  const gridUrl =
+    "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+
+  const grid = new Texture(
+    gridUrl,
+    scene,
+    true,                          // noMipmap
+    false,                         // invertY
+    Texture.TRILINEAR_SAMPLINGMODE
+  );
+  grid.hasAlpha = true;
+
+  const gridMat = new StandardMaterial("ph_vmGridMat", scene);
+  gridMat.emissiveTexture = grid;
+  gridMat.emissiveColor = new Color3(1, 1, 1);
+  gridMat.diffuseColor = new Color3(0, 0, 0);
+  gridMat.specularColor = new Color3(0, 0, 0);
+  gridMat.diffuseTexture = grid;
+  gridMat.opacityTexture = grid;
+  gridMat.useAlphaFromDiffuseTexture = true;
+  gridMat.disableLighting = true;
+  gridMat.backFaceCulling = false;
+  gridMat.maxSimultaneousLights = 8;
+
+  const gridPlane = MeshBuilder.CreatePlane("vmGrid",
+    { width: 0.10, height: 0.065 }, scene);
+  gridPlane.position.set(0, 0, -0.0435);
+  gridPlane.rotation.y = Math.PI;
+  gridPlane.material = gridMat;
+  gridPlane.parent = root;
+  gridPlane.isPickable = false;
+
+  return { root, meshes: [body, lens, screen, gridPlane] };
+}
   
   /** Простой камень на песке (для дорожки). */
   export function createPathStone(scene: Scene, name: string): Mesh {

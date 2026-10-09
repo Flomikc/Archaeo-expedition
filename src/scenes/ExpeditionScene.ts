@@ -68,6 +68,7 @@ export class ExpeditionScene {
   private drillCompleted = false;
   private finished = false;
   private hasCamera = false;
+  private shotActive = false;
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (this.finished) return;
@@ -344,13 +345,64 @@ export class ExpeditionScene {
 
   private tryPhoto(): void {
     if (this.finished) return;
+    if (this.shotActive) return;
     if (!this.hasCamera) {
       this.hud.showToast("Нет фотоаппарата!");
       return;
     }
+    if (this.photos <= 0) {
+      this.hud.showToast("Плёнка закончилась!");
+      return;
+    }
     if (this.shotCooldown > 0) return;
-    this.shotCooldown = 0.35;
-    this.takePhoto();
+
+    this.shotActive = true;
+    // ── Движение НЕ блокируем — можно бегать с фотиком у лица ──
+    this.cameraItem?.startShot({
+      onAimReached: () => {
+        this.photos -= 1;
+        this.hud.setPhotos(this.photos);
+        this.hud.flashScreen();
+        this.cameraItem?.shootKick();
+        this.playShotSound();
+
+        const target = this.findAnomalyInSight();
+        if (target) {
+          target.dispose();
+          this.anomalies = this.anomalies.filter((a) => a !== target);
+          this.hud.showToast("Аномалия запечатлена!");
+        } else {
+          this.hud.showToast("Промах…");
+        }
+      },
+      onReturned: () => {
+        this.shotActive = false;
+        this.shotCooldown = 0.3;
+      },
+    });
+  }
+
+  private playShotSound(): void {
+    try {
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(1200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.13);
+      setTimeout(() => ctx.close(), 300);
+    } catch {
+      /* ignore */
+    }
   }
 
   private tryMedkit(): void {
@@ -488,25 +540,6 @@ export class ExpeditionScene {
     const pool = sameFloorRooms.length > 0 ? sameFloorRooms : this.level.rooms;
     const r = pool[Math.floor(Math.random() * pool.length)];
     return new Vector3(r.centerX, r.floorY, r.centerZ);
-  }
-
-  private takePhoto(): void {
-    if (this.photos <= 0) {
-      this.hud.showToast("Плёнка закончилась!");
-      return;
-    }
-    this.photos -= 1;
-    this.hud.setPhotos(this.photos);
-    this.cameraItem?.shootKick();
-
-    const target = this.findAnomalyInSight();
-    if (target) {
-      target.dispose();
-      this.anomalies = this.anomalies.filter((a) => a !== target);
-      this.hud.showToast("Аномалия запечатлена!");
-    } else {
-      this.hud.showToast("Промах…");
-    }
   }
 
   private findAnomalyInSight(): Anomaly | null {

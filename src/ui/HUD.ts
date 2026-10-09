@@ -66,6 +66,12 @@ export class HUD {
   private readonly resultTitle = el<HTMLHeadingElement>("result-title");
   private readonly resultBody = el<HTMLDivElement>("result-body");
   private readonly resultButtons = el<HTMLDivElement>("result-buttons");
+  
+  // ── Видоискатель и вспышка — ОПЦИОНАЛЬНЫЕ ────────────
+  private viewfinder: HTMLDivElement | null = null;
+  private flashEl: HTMLDivElement | null = null;
+  private flashTimer: number | null = null;
+  private viewfinderHideTimer: number | null = null;
 
   // Кэш
   private lastHint: string | null = null;
@@ -79,6 +85,18 @@ export class HUD {
   private shopBuyHandler: ((id: string) => void) | null = null;
   private locationSelectHandler: ((id: string) => void) | null = null;
   private laptopCloseHandler: (() => void) | null = null;
+
+  // ──────────────────────────────────────────────────────
+  //  Конструктор
+  // ──────────────────────────────────────────────────────
+  constructor() {
+    // Опциональные элементы — не падаем, если их нет в DOM
+    const vfNode = document.getElementById("viewfinder");
+    if (vfNode instanceof HTMLDivElement) this.viewfinder = vfNode;
+
+    const flashNode = document.getElementById("flash");
+    if (flashNode instanceof HTMLDivElement) this.flashEl = flashNode;
+  }
 
   // ---------------------------------------------------------------- меню
 
@@ -156,6 +174,40 @@ export class HUD {
       this.toastEl.classList.add("hidden");
       this.toastTimer = null;
     }, durationMs);
+  }
+  // ── Видоискатель ──────────────────────────────────────
+  showViewfinder(): void {
+    if (!this.viewfinder) return;
+    if (this.viewfinderHideTimer !== null) {
+      window.clearTimeout(this.viewfinderHideTimer);
+      this.viewfinderHideTimer = null;
+    }
+    this.viewfinder.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.viewfinder?.classList.add("visible");
+      });
+    });
+  }
+
+  hideViewfinder(): void {
+    if (!this.viewfinder) return;
+    this.viewfinder.classList.remove("visible");
+    this.viewfinderHideTimer = window.setTimeout(() => {
+      this.viewfinder?.classList.add("hidden");
+      this.viewfinderHideTimer = null;
+    }, 220);
+  }
+
+  // ── Вспышка ───────────────────────────────────────────
+  flashScreen(): void {
+    if (!this.flashEl) return;
+    this.flashEl.classList.add("active");
+    if (this.flashTimer !== null) window.clearTimeout(this.flashTimer);
+    this.flashTimer = window.setTimeout(() => {
+      this.flashEl?.classList.remove("active");
+      this.flashTimer = null;
+    }, 60);
   }
 
   // ------------------------------------------------------------- ноутбук

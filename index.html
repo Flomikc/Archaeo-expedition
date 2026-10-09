@@ -315,6 +315,190 @@
         display: flex; gap: 12px; flex-wrap: wrap;
         justify-content: center; margin-top: 8px;
       }
+      /* ══════════ Видоискатель фотоаппарата ══════════ */
+#viewfinder {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+}
+#viewfinder.visible { opacity: 1; }
+#viewfinder.hidden { display: none !important; }
+
+/* Виньетка */
+.vf-frame {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 40%,
+    rgba(0, 0, 0, 0.45) 75%,
+    rgba(0, 0, 0, 0.75) 100%
+  );
+}
+.vf-frame::after {
+  content: "";
+  position: absolute;
+  inset: 6vh 6vw;
+  border: 1px solid rgba(232, 201, 138, 0.6);
+  border-radius: 4px;
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Уголки */
+.vf-corner {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-color: #e8c98a;
+  border-style: solid;
+  border-width: 0;
+}
+.vf-tl { top: 6vh; left: 6vw; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 4px; }
+.vf-tr { top: 6vh; right: 6vw; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 4px; }
+.vf-bl { bottom: 6vh; left: 6vw; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 4px; }
+.vf-br { bottom: 6vh; right: 6vw; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 4px; }
+
+/* Насечки */
+.vf-ruler {
+  position: absolute;
+  pointer-events: none;
+}
+.vf-ruler-top,
+.vf-ruler-bottom {
+  left: 6vw; right: 6vw;
+  height: 12px;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent 11px,
+    rgba(232, 201, 138, 0.55) 11px,
+    rgba(232, 201, 138, 0.55) 12px
+  );
+}
+.vf-ruler-top {
+  top: 6vh;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+}
+.vf-ruler-bottom {
+  bottom: 6vh;
+  mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+}
+.vf-ruler-left,
+.vf-ruler-right {
+  top: 6vh; bottom: 6vh;
+  width: 12px;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 11px,
+    rgba(232, 201, 138, 0.55) 11px,
+    rgba(232, 201, 138, 0.55) 12px
+  );
+}
+.vf-ruler-left {
+  left: 6vw;
+  mask-image: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+  -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+}
+.vf-ruler-right {
+  right: 6vw;
+  mask-image: linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+  -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%);
+}
+
+/* Сетка третей */
+.vf-grid {
+  position: absolute;
+  inset: 6vh 6vw;
+  pointer-events: none;
+}
+.vf-grid-v,
+.vf-grid-h {
+  position: absolute;
+  background: rgba(232, 201, 138, 0.25);
+}
+.vf-grid-v { top: 0; bottom: 0; width: 1px; }
+.vf-grid-v.v1 { left: 33.333%; }
+.vf-grid-v.v2 { left: 66.666%; }
+.vf-grid-h { left: 0; right: 0; height: 1px; }
+.vf-grid-h.h1 { top: 33.333%; }
+.vf-grid-h.h2 { top: 66.666%; }
+
+/* Центральная окружность */
+.vf-circle {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 140px; height: 140px;
+  margin: -70px 0 0 -70px;
+  border: 2px solid rgba(232, 201, 138, 0.85);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(232, 201, 138, 0.25);
+}
+
+/* Перекрестие */
+.vf-crosshair {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 40px; height: 40px;
+  margin: -20px 0 0 -20px;
+}
+.vf-cross-h {
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%; height: 1px;
+  background: rgba(232, 201, 138, 0.9);
+}
+.vf-cross-v {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%; width: 1px;
+  background: rgba(232, 201, 138, 0.9);
+}
+
+/* REC-индикатор */
+.vf-recdot {
+  position: absolute;
+  top: calc(6vh + 8px);
+  left: calc(6vw + 12px);
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #f44336;
+  box-shadow: 0 0 8px #f44336;
+  animation: vf-blink 1.2s infinite;
+}
+@keyframes vf-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.2; }
+}
+.vf-label {
+  position: absolute;
+  top: calc(6vh + 6px);
+  left: calc(6vw + 28px);
+  font-family: "Consolas", "Monaco", monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: #e8c98a;
+}
+
+/* ══════════ Вспышка ══════════ */
+#flash {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: white;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease-out;
+}
+#flash.active {
+  opacity: 0.95;
+  transition: none;
+}
     </style>
   </head>
   <body>
@@ -322,6 +506,47 @@
 
     <!-- ================= HUD ================= -->
     <div id="hud" class="hidden">
+          <!-- ══════════ Видоискатель фотоаппарата ══════════ -->
+    <div id="viewfinder" class="hidden">
+      <!-- Виньетка по краям -->
+      <div class="vf-frame"></div>
+
+      <!-- Уголки -->
+      <div class="vf-corner vf-tl"></div>
+      <div class="vf-corner vf-tr"></div>
+      <div class="vf-corner vf-bl"></div>
+      <div class="vf-corner vf-br"></div>
+
+      <!-- Насечки по краям рамки -->
+      <div class="vf-ruler vf-ruler-top"></div>
+      <div class="vf-ruler vf-ruler-bottom"></div>
+      <div class="vf-ruler vf-ruler-left"></div>
+      <div class="vf-ruler vf-ruler-right"></div>
+
+      <!-- Сетка третей -->
+      <div class="vf-grid">
+        <div class="vf-grid-v v1"></div>
+        <div class="vf-grid-v v2"></div>
+        <div class="vf-grid-h h1"></div>
+        <div class="vf-grid-h h2"></div>
+      </div>
+
+      <!-- Центральная окружность -->
+      <div class="vf-circle"></div>
+
+      <!-- Перекрестие -->
+      <div class="vf-crosshair">
+        <div class="vf-cross-h"></div>
+        <div class="vf-cross-v"></div>
+      </div>
+
+      <!-- REC-индикатор -->
+      <div class="vf-recdot"></div>
+      <div class="vf-label">REC</div>
+    </div>
+
+    <!-- ══════════ Вспышка ══════════ -->
+    <div id="flash"></div>
       <div id="crosshair"></div>
 
       <div id="hud-left">
