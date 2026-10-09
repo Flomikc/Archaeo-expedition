@@ -10,7 +10,7 @@ import {
   MeshBuilder,
   Scene,
   StandardMaterial,
-  Texture,          // ← обязательно
+  Texture,
   Vector3,
 } from "@babylonjs/core";
 
@@ -39,12 +39,24 @@ export interface TexParams {
   wAng: number;
 }
 
+interface MeshMeta {
+  type: string;
+  shape: string;
+  w: number;
+  h: number;
+  d: number;
+  material: string;
+  isCylinder: boolean;
+  color?: string;   // hex "#rrggbb"
+  tex?: TexParams;
+}
+
 export interface EditorEvents {
   onSelectionChanged: (mesh: Mesh | null) => void;
   onObjectsChanged: (meshes: Mesh[]) => void;
 }
 
-const DEFAULT_ROOM = { x: 18, z: 18, wallHeight: 4.5 };
+const DEFAULT_ROOM = { x: 18.9, z: 18.9, wallHeight: 4.5 };
 
 // ============================================================
 //  ГЛАВНЫЙ КЛАСС
@@ -127,7 +139,7 @@ export class EditorScene {
   }
 
   // ============================================================
-  //  API — работа с объектами
+  //  РАБОТА С ОБЪЕКТАМИ
   // ============================================================
 
   addObject(typeId: string): Mesh | null {
@@ -136,7 +148,7 @@ export class EditorScene {
 
     const mesh = spawnByType(this.scene, def, this.materials);
     placeAtCenter(mesh);
-    mesh.name = `${def.type}_${this.objects.filter((o) => o.metadata.type === def.type).length + 1}`;
+    mesh.name = `${def.type}_${this.objects.filter((o) => (o.metadata as MeshMeta).type === def.type).length + 1}`;
 
     this.objects.push(mesh);
     this.select(mesh);
@@ -156,10 +168,7 @@ export class EditorScene {
   duplicateSelected(): void {
     if (!this.selected) return;
     const src = this.selected;
-    const meta = src.metadata as {
-      type: string; w: number; h: number; d: number; material: string;
-      tex?: TexParams;
-    };
+    const meta = src.metadata as MeshMeta;
     const def = OBJECT_TYPES.find((d) => d.type === meta.type);
     if (!def) return;
 
@@ -176,20 +185,15 @@ export class EditorScene {
     copy.position.x += 1;
     copy.rotation.copyFrom(src.rotation);
     copy.scaling.copyFrom(src.scaling);
-    copy.name = `${meta.type}_${this.objects.filter((o) => o.metadata.type === meta.type).length + 1}`;
+    copy.name = `${meta.type}_${this.objects.filter((o) => (o.metadata as MeshMeta).type === meta.type).length + 1}`;
 
-    // Переносим tex-настройки
-    const srcTex = (src.material as StandardMaterial).diffuseTexture as Texture | null;
-    const copyTex = (copy.material as StandardMaterial).diffuseTexture as Texture | null;
-    if (srcTex && copyTex) {
-      copyTex.uScale = srcTex.uScale;
-      copyTex.vScale = srcTex.vScale;
-      copyTex.uOffset = srcTex.uOffset;
-      copyTex.vOffset = srcTex.vOffset;
-      copyTex.wAng = srcTex.wAng;
-    }
-    const copyMeta = copy.metadata as { tex?: TexParams };
+    // Копируем meta-поля
+    const copyMeta = copy.metadata as MeshMeta;
     copyMeta.tex = meta.tex ? { ...meta.tex } : undefined;
+    copyMeta.color = meta.color;
+
+    // Применяем материал с учётом цвета
+    this.applyMaterialState(copy, copyMeta);
 
     this.objects.push(copy);
     this.select(copy);
@@ -204,6 +208,46 @@ export class EditorScene {
   }
 
   // ============================================================
+  //  МАТЕРИАЛ: ЕДИНАЯ ТОЧКА ПРИМЕНЕНИЯ
+  // ============================================================
+  //
+  // Если meta.color задан → solid-материал.
+  // Иначе → клонированный из реестра с текстурой + tex-параметры.
+
+  private applyMaterialState(mesh: Mesh, meta: MeshMeta): void {
+    // Сначала избавляемся от старого материала
+    if (mesh.material) {
+      mesh.material.dispose();
+      mesh.material = null;
+    }
+
+    if (meta.color) {
+      // ── Solid color ─────────────────────────────────────
+      const c = Color3.FromHexString(meta.color);
+      const solid = new StandardMaterial(`mat_solid_${mesh.name}`, this.scene);
+      solid.diffuseColor = c;
+      solid.emissiveColor = new Color3(c.r * 0.08, c.g * 0.08, c.b * 0.08);
+      solid.specularColor = new Color3(0.05, 0.05, 0.05);
+      solid.maxSimultaneousLights = 8;
+      mesh.material = solid;
+      return;
+    }
+
+    // ── Материал с текстурой ─────────────────────────────
+    const cloned = this.materials.getCloned(meta.material);
+    mesh.material = cloned;
+
+    const tex = cloned.diffuseTexture as Texture | null;
+    if (tex && meta.tex) {
+      tex.uScale = meta.tex.uScale;
+      tex.vScale = meta.tex.vScale;
+      tex.uOffset = meta.tex.uOffset;
+      tex.vOffset = meta.tex.vOffset;
+      tex.wAng = meta.tex.wAng;
+    }
+  }
+
+  // ============================================================
   //  ОБНОВЛЕНИЕ ТРАНСФОРМАЦИИ
   // ============================================================
 
@@ -212,19 +256,14 @@ export class EditorScene {
     rx?: number; ry?: number; rz?: number;
     w?: number; h?: number; d?: number;
     material?: string;
+    /** null = сбросить цвет (вернуться к текстуре). undefined = не менять. */
+    color?: string | null;
     tex?: Partial<TexParams>;
   }): void {
     const mesh = this.selected;
     if (!mesh) return;
 
-    const meta = mesh.metadata as {
-      type: string;
-      shape: string;
-      w: number; h: number; d: number;
-      material: string;
-      isCylinder: boolean;
-      tex?: TexParams;
-    };
+    const meta = mesh.metadata as MeshMeta;
 
     // ── Позиция ────────────────────────────────────────────
     if (patch.x !== undefined) mesh.position.x = patch.x;
@@ -248,6 +287,7 @@ export class EditorScene {
       const pos = mesh.position.clone();
       const rot = mesh.rotation.clone();
       const name = mesh.name;
+      const savedColor = meta.color;
       const savedTex = meta.tex ? { ...meta.tex } : undefined;
 
       this.gizmos.attachToMesh(null);
@@ -268,21 +308,12 @@ export class EditorScene {
       newMesh.rotation.copyFrom(rot);
       newMesh.name = name;
 
-      // Переносим tex
-      const newTex = (newMesh.material as StandardMaterial).diffuseTexture as Texture | null;
-      if (newTex && savedTex) {
-        newTex.uScale = savedTex.uScale;
-        newTex.vScale = savedTex.vScale;
-        newTex.uOffset = savedTex.uOffset;
-        newTex.vOffset = savedTex.vOffset;
-        newTex.wAng = savedTex.wAng;
-      }
-      const newMeta = newMesh.metadata as {
-        w: number; h: number; d: number;
-        tex?: TexParams;
-      };
+      const newMeta = newMesh.metadata as MeshMeta;
       newMeta.w = newW; newMeta.h = newH; newMeta.d = newD;
+      newMeta.color = savedColor;
       newMeta.tex = savedTex;
+
+      this.applyMaterialState(newMesh, newMeta);
 
       const idx = this.objects.indexOf(mesh);
       if (idx >= 0) this.objects[idx] = newMesh;
@@ -292,32 +323,36 @@ export class EditorScene {
       return;
     }
 
-    // ── Материал ───────────────────────────────────────────
+    // ── Материал (текстура) ────────────────────────────────
     if (patch.material !== undefined) {
       meta.material = patch.material;
-      mesh.material = this.materials.getCloned(patch.material);
-
-    const tex = (mesh.material as StandardMaterial).diffuseTexture as Texture | null;
-        if (tex && meta.tex) {
-        tex.uScale = meta.tex.uScale;
-        tex.vScale = meta.tex.vScale;
-        tex.uOffset = meta.tex.uOffset;
-        tex.vOffset = meta.tex.vOffset;
-        tex.wAng = meta.tex.wAng;
-      }
+      // Смена материала сбрасывает цвет
+      meta.color = undefined;
+      this.applyMaterialState(mesh, meta);
     }
 
-    // ── Tex-настройки ──────────────────────────────────────
-    if (patch.tex) {
-    const tex = (mesh.material as StandardMaterial).diffuseTexture as Texture | null;
+    // ── Цвет ──────────────────────────────────────────────
+    if (patch.color !== undefined) {
+      if (patch.color === null) {
+        meta.color = undefined;
+      } else {
+        meta.color = patch.color;
+      }
+      this.applyMaterialState(mesh, meta);
+    }
+
+    // ── Tex-параметры ──────────────────────────────────────
+    if (patch.tex && !meta.color) {
+      // Игнорируем tex, если включён solid-цвет — текстуры нет
+      const tex = (mesh.material as StandardMaterial).diffuseTexture as Texture | null;
       if (tex) {
         if (!meta.tex) {
           meta.tex = {
-            uScale: tex.uScale ?? 1,
-            vScale: tex.vScale ?? 1,
-            uOffset: tex.uOffset ?? 0,
-            vOffset: tex.vOffset ?? 0,
-            wAng: tex.wAng ?? 0,
+            uScale: tex.uScale,
+            vScale: tex.vScale,
+            uOffset: tex.uOffset,
+            vOffset: tex.vOffset,
+            wAng: tex.wAng,
           };
         }
         if (patch.tex.uScale !== undefined) {
@@ -387,7 +422,7 @@ export class EditorScene {
       rng: () => Math.random(),
       cell: { i: 0, j: 0, floor: 0 },
       centerX: 0, centerZ: 0, floorY: 0,
-      sizeX: 18, sizeZ: 18,
+      sizeX: 18.9, sizeZ: 18.9,
       wallHeight: 4.5,
       ceilingY: 4.5,
       doors: { ...bp.exits },
@@ -410,10 +445,10 @@ export class EditorScene {
     const meta = mesh.metadata as {
       type?: string;
       material?: string;
+      color?: string;
       tex?: TexParams;
     } | null;
 
-    // ── Тип ─────────────────────────────────────────────────
     let type: string;
     if (meta?.type) {
       type = meta.type;
@@ -428,7 +463,6 @@ export class EditorScene {
     else if (/orb/i.test(mesh.name)) type = "sphere";
     else type = "box";
 
-    // ── Материал ────────────────────────────────────────────
     let cleanMat = meta?.material ?? "";
     if (!cleanMat) {
       const matName = (mesh.material as { name?: string } | null)?.name ?? "";
@@ -437,7 +471,6 @@ export class EditorScene {
         "stone";
     }
 
-    // ── Размер: локальный AABB ──────────────────────────────
     const bb = mesh.getBoundingInfo().boundingBox;
     const localSize = bb.extendSize.scale(2);
 
@@ -452,7 +485,6 @@ export class EditorScene {
     if (metaFull?.h !== undefined) sizeY = metaFull.h;
     if (metaFull?.d !== undefined) sizeZ = metaFull.d;
 
-    // ── Создаём редактируемый объект ────────────────────────
     const baseDef =
       OBJECT_TYPES.find((d) => d.type === type) ?? OBJECT_TYPES[0];
 
@@ -473,38 +505,29 @@ export class EditorScene {
     } else {
       editable.rotation.copyFrom(mesh.rotation);
     }
-    editable.name = `${type}_${this.objects.filter((o) => o.metadata.type === type).length + 1}`;
+    editable.name = `${type}_${this.objects.filter((o) => (o.metadata as MeshMeta).type === type).length + 1}`;
 
-    const editMeta = editable.metadata as {
-      w: number; h: number; d: number;
-      material: string;
-      tex?: TexParams;
-    };
+    const editMeta = editable.metadata as MeshMeta;
     editMeta.w = sizeX;
     editMeta.h = sizeY;
     editMeta.d = sizeZ;
     editMeta.material = cleanMat;
+    editMeta.color = meta?.color;
 
-    // ── Tex ─────────────────────────────────────────────────
+    // ── Tex ────────────────────────────────────────────────
     const srcTex = meta?.tex;
     const regDef = getTexture(cleanMat);
     const defaultTex: TexParams = srcTex ?? {
-      uScale: regDef?.uScale ?? 1,
-      vScale: regDef?.vScale ?? 1,
+      uScale: regDef ? regDef.uScale : 1,
+      vScale: regDef ? regDef.vScale : 1,
       uOffset: 0,
       vOffset: 0,
       wAng: 0,
     };
-
-    const editableTex = (editable.material as StandardMaterial).diffuseTexture as Texture | null;
-    if (editableTex) {
-      editableTex.uScale = defaultTex.uScale;
-      editableTex.vScale = defaultTex.vScale;
-      editableTex.uOffset = defaultTex.uOffset;
-      editableTex.vOffset = defaultTex.vOffset;
-      editableTex.wAng = defaultTex.wAng;
-    }
     editMeta.tex = { ...defaultTex };
+
+    // ── Применяем материю с учётом цвета ──────────────────
+    this.applyMaterialState(editable, editMeta);
 
     mesh.dispose();
     this.objects.push(editable);
@@ -594,6 +617,7 @@ export interface ExportedObject {
   rx: number; ry: number; rz: number;
   w: number; h: number; d: number;
   material: string;
+  color?: string;
   tex: {
     uScale: number;
     vScale: number;
@@ -617,12 +641,7 @@ export function exportToJSON(
   const objects: ExportedObject[] = [];
 
   for (const mesh of meshes) {
-    const meta = mesh.metadata as {
-      type: string;
-      w: number; h: number; d: number;
-      material: string;
-      tex?: TexParams;
-    };
+    const meta = mesh.metadata as MeshMeta;
 
     const rot = mesh.rotationQuaternion
       ? mesh.rotationQuaternion.toEulerAngles()
@@ -632,7 +651,7 @@ export function exportToJSON(
       uScale: 1, vScale: 1, uOffset: 0, vOffset: 0, wAng: 0,
     };
 
-    objects.push({
+    const obj: ExportedObject = {
       type: meta.type,
       x: round(mesh.position.x),
       y: round(mesh.position.y),
@@ -651,7 +670,11 @@ export function exportToJSON(
         vOffset: round(t.vOffset, 4),
         wAng: round(t.wAng, 4),
       },
-    });
+    };
+
+    if (meta.color) obj.color = meta.color;
+
+    objects.push(obj);
   }
 
   return { roomId, size, objects };

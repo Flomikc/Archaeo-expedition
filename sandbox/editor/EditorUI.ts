@@ -204,9 +204,21 @@ export class EditorUI {
       <div class="section">
         <h3>Материал</h3>
         <label class="field">
-          <span>Материал</span>
+          <span>Материал (текстура)</span>
           <select id="field-material"></select>
         </label>
+        <button id="btn-material-reset-color" style="margin-top:6px;">Вернуть текстуру</button>
+      </div>
+
+      <div class="section">
+        <h3>Цвет</h3>
+        <label class="field">
+          <span>Solid-цвет поверх текстуры</span>
+          <input id="field-color" type="color" value="#ffffff" />
+        </label>
+        <p class="hint">
+          Если задан цвет — материал игнорируется. Сбросить — кнопка выше.
+        </p>
       </div>
 
       <div class="section">
@@ -306,7 +318,22 @@ export class EditorUI {
         this.editor.updateSelectedTransform({ material: matSelInit.value });
       });
     }
-  }
+
+    // ── Цвет ─────────────────────────────────────────────
+    const colorInput = document.getElementById("field-color") as HTMLInputElement | null;
+    if (colorInput) {
+      colorInput.addEventListener("input", () => {
+        this.editor.updateSelectedTransform({ color: colorInput.value });
+      });
+    }
+
+    const btnResetColor = document.getElementById("btn-material-reset-color") as HTMLButtonElement | null;
+    if (btnResetColor) {
+      btnResetColor.addEventListener("click", () => {
+        this.editor.updateSelectedTransform({ color: null });
+      });
+    }
+  }   // ← закрывающая скобка метода buildInspectorOnce — теперь в конце
 
   refreshInspector(mesh: Mesh | null): void {
     if (!mesh) {
@@ -369,6 +396,13 @@ export class EditorUI {
         set("field-TEXOU", meta.tex.uOffset, 3);
         set("field-TEXOV", meta.tex.vOffset, 3);
         set("field-TEXW", meta.tex.wAng * R2D, 1);
+      }
+
+      // ── Цвет ──────────────────────────────────────────
+      const colorInput = document.getElementById("field-color") as HTMLInputElement | null;
+      if (colorInput && document.activeElement !== colorInput) {
+        const colorMeta = mesh.metadata as { color?: string } | undefined;
+        colorInput.value = colorMeta?.color ?? "#ffffff";
       }
     }
   }

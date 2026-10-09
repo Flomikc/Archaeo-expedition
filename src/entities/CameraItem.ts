@@ -1,7 +1,5 @@
 import {
   AbstractMesh,
-  Color4,
-  RenderTargetTexture,
   Scene,
   TransformNode,
   UniversalCamera,
@@ -14,26 +12,16 @@ import {
 } from "./placeholders";
 
 // ── Позиции viewmodel ────────────────────────────────────────
-const REST_POS = new Vector3(0.28, -0.28, 0.55);
+const REST_POS = new Vector3(0.32, -0.32, 0.62);
 const REST_ROT = new Vector3(0.15, -0.25, 0.05);
 
-const AIM_POS = new Vector3(0, -0.05, 0.35);
+const AIM_POS = new Vector3(0, -0.03, 0.34);
 const AIM_ROT = new Vector3(0, 0, 0);
 
-const RAISE_TIME = 0.22;
-const AIM_HOLD = 0.15;
-const LOWER_TIME = 0.25;
+const RAISE_TIME = 0.32;
+const LOWER_TIME = 0.34;
 
-// refreshRate для RTT: чем больше число, тем реже рендер.
-const RTT_RATE_IDLE = 4;    // idle — раз в 4 кадра
-const RTT_RATE_AIM  = 1;    // при съёмке — каждый кадр
-
-export interface ShotCallbacks {
-  onAimReached?: () => void;
-  onReturned?: () => void;
-}
-
-type ShotState = "idle" | "raising" | "aiming" | "lowering";
+type RaiseState = "idle" | "raising" | "aiming" | "lowering";
 
 export class CameraItem {
   readonly worldRoot: TransformNode;
@@ -43,12 +31,12 @@ export class CameraItem {
   private kick = 0;
   private owned = false;
 
-  private shotState: ShotState = "idle";
-  private shotT = 0;
-  private shotCallbacks: ShotCallbacks = {};
+  private raiseState: RaiseState = "idle";
+  private raiseT = 0;
 
-  /** RTT — живой вид с камеры игрока. Всегда активен. */
-  private screenRTT: RenderTargetTexture | null = null;
+  private redrawRec: ((visible: boolean) => void) | null = null;
+  private recTimer = 0;
+  private recVisible = true;
 
   constructor(private readonly scene: Scene, worldPosition: Vector3) {
     const placeholder = createCameraWorldPlaceholder(scene);
@@ -65,21 +53,32 @@ export class CameraItem {
     return this.owned;
   }
 
-  get isShooting(): boolean {
-    return this.shotState !== "idle";
+  get isRaised(): boolean {
+    return this.raiseState === "aiming";
   }
 
-  startShot(callbacks: ShotCallbacks = {}): void {
+  get isAnimating(): boolean {
+    return this.raiseState === "raising" || this.raiseState === "lowering";
+  }
+
+  startRaise(): void {
     if (!this.owned) return;
-    if (this.shotState !== "idle") return;
+    if (this.raiseState === "raising" || this.raiseState === "aiming") return;
+    this.raiseState = "raising";
+    this.raiseT = 0;
+  }
 
-    // Ускоряем обновление RTT на время съёмки.
-    if (this.screenRTT) this.screenRTT.refreshRate = RTT_RATE_AIM;
+  startLower(): void {
+    if (!this.owned) return;
+    if (this.raiseState === "lowering" || this.raiseState === "idle") return;
+    this.raiseState = "lowering";
+    this.raiseT = 0;
+  }
 
-    this.kick = 0;
-    this.shotState = "raising";
-    this.shotT = 0;
-    this.shotCallbacks = callbacks;
+  shoot(): void {
+    if (!this.owned) return;
+    this.kick = 0.08;
+    this.playClickSound();
   }
 
   pickup(camera: UniversalCamera): void {
@@ -87,97 +86,70 @@ export class CameraItem {
     this.owned = true;
     this.worldRoot.setEnabled(false);
 
-    // ── RTT ────────────────────────────────────────────────
-    // Всегда в customRenderTargets. Регулируем только частоту.
-    const rtt = new RenderTargetTexture(
-      "cameraScreen",
-      { width: 192, height: 128 },
-      this.scene,
-      false
-    );
-    rtt.activeCamera = camera;
-    rtt.clearColor = new Color4(0, 0, 0, 1);
-    rtt.refreshRate = RTT_RATE_IDLE;
-    rtt.renderParticles = false;
-    rtt.renderSprites = false;
-    rtt.skipInitialClear = false;
-    this.screenRTT = rtt;
+    // Depth сохраняется между группами 0 → 1 → 2. Маска в группе 1
+    // пишет depth, корпус в группе 2 в её области не рисуется —
+    // получается окно в мир.
+    this.scene.setRenderingAutoClearDepthStencil(1, false);
+    this.scene.setRenderingAutoClearDepthStencil(2, false);
 
-    // ── Исключаем viewmodel из RTT (иначе — рекурсия) ──────
-    const viewSet = new Set<AbstractMesh>();
-
-    // ── Viewmodel ──────────────────────────────────────────
-    const placeholder = createCameraViewModelPlaceholder(this.scene, rtt);
+    const placeholder = createCameraViewModelPlaceholder(this.scene);
     this.viewRoot = placeholder.root;
     this.viewRoot.parent = camera;
     this.viewRoot.position.copyFrom(REST_POS);
     this.viewRoot.rotation.set(REST_ROT.x, REST_ROT.y, REST_ROT.z);
 
-    // Заполняем viewSet после создания viewmodel.
-    for (const m of placeholder.meshes) viewSet.add(m);
-    rtt.renderListPredicate = (mesh) => !viewSet.has(mesh);
-
-    // ── Добавляем в очередь рендера сцены ──────────────────
-    this.scene.customRenderTargets.push(rtt);
-  }
-
-  shootKick(): void {
-    this.kick = 0.08;
-    this.playClickSound();
+    if (placeholder.redrawRec) {
+      this.redrawRec = placeholder.redrawRec;
+    }
   }
 
   update(dt: number): void {
     if (!this.viewRoot) return;
 
-    if (this.shotState !== "idle") {
-      const duration =
-        this.shotState === "raising" ? RAISE_TIME :
-        this.shotState === "aiming"  ? AIM_HOLD   :
-        LOWER_TIME;
+    // ── Мигание REC (2 Гц) ─────────────────────────────
+    if (this.redrawRec) {
+      this.recTimer += dt;
+      if (this.recTimer >= 0.5) {
+        this.recTimer -= 0.5;
+        this.recVisible = !this.recVisible;
+        this.redrawRec(this.recVisible);
+      }
+    }
 
-      this.shotT += dt / duration;
+    if (this.raiseState === "raising") {
+      this.raiseT += dt / RAISE_TIME;
+      const k = smoothstep(Math.min(1, this.raiseT));
+      lerpVec(this.viewRoot.position, REST_POS, AIM_POS, k);
+      lerpVec(this.viewRoot.rotation, REST_ROT, AIM_ROT, k);
+      if (this.raiseT >= 1) {
+        this.viewRoot.position.copyFrom(AIM_POS);
+        this.viewRoot.rotation.copyFrom(AIM_ROT);
+        this.raiseState = "aiming";
+        this.raiseT = 0;
+      }
+      return;
+    }
 
-      if (this.shotState === "raising") {
-        const k = smoothstep(Math.min(1, this.shotT));
-        lerpVec(this.viewRoot.position, REST_POS, AIM_POS, k);
-        lerpVec(this.viewRoot.rotation, REST_ROT, AIM_ROT, k);
-        if (this.shotT >= 1) {
-          this.shotState = "aiming";
-          this.shotT = 0;
-          this.shotCallbacks.onAimReached?.();
-        }
-      } else if (this.shotState === "aiming") {
-        if (this.shotT >= 1) {
-          this.shotState = "lowering";
-          this.shotT = 0;
-        }
-      } else if (this.shotState === "lowering") {
-        const k = smoothstep(Math.min(1, this.shotT));
-        lerpVec(this.viewRoot.position, AIM_POS, REST_POS, k);
-        lerpVec(this.viewRoot.rotation, AIM_ROT, REST_ROT, k);
-        if (this.shotT >= 1) {
-          this.shotState = "idle";
-          this.shotT = 0;
-          this.shotCallbacks.onReturned?.();
-          this.shotCallbacks = {};
-
-          // Возвращаем медленный режим RTT.
-          if (this.screenRTT) this.screenRTT.refreshRate = RTT_RATE_IDLE;
-        }
+    if (this.raiseState === "lowering") {
+      this.raiseT += dt / LOWER_TIME;
+      const k = smoothstep(Math.min(1, this.raiseT));
+      lerpVec(this.viewRoot.position, AIM_POS, REST_POS, k);
+      lerpVec(this.viewRoot.rotation, AIM_ROT, REST_ROT, k);
+      if (this.raiseT >= 1) {
+        this.viewRoot.position.copyFrom(REST_POS);
+        this.viewRoot.rotation.copyFrom(REST_ROT);
+        this.raiseState = "idle";
+        this.raiseT = 0;
       }
       return;
     }
 
     if (this.kick > 0) this.kick = Math.max(0, this.kick - dt * 0.35);
-    this.viewRoot.position.y = REST_POS.y + this.kick;
+    const baseY = this.raiseState === "aiming" ? AIM_POS.y : REST_POS.y;
+    this.viewRoot.position.y = baseY + this.kick;
   }
 
   dispose(): void {
-    if (this.screenRTT) {
-      const idx = this.scene.customRenderTargets.indexOf(this.screenRTT);
-      if (idx >= 0) this.scene.customRenderTargets.splice(idx, 1);
-      this.screenRTT.dispose();
-    }
     this.viewRoot?.dispose();
     this.worldRoot.dispose();
   }

@@ -1,6 +1,7 @@
 import {
   AbstractMesh,
   Color3,
+  DynamicTexture,
   Mesh,
   MeshBuilder,
   RenderTargetTexture,
@@ -10,6 +11,8 @@ import {
   TransformNode,
   Vector3,
 } from "@babylonjs/core";
+
+import { TEXTURES } from "../data/textures";
   
   /**
    * Здесь собраны ВСЕ визуальные «болванки» для интерактивных объектов.
@@ -24,11 +27,13 @@ import {
    *   3. Больше ничего менять не нужно — логика уже работает с root и meshes.
    */
   
-  export interface PlaceholderResult {
-    root: TransformNode;
-    /** Меши, которые участвуют в raycast (наведение игрока). */
-    meshes: AbstractMesh[];
-  }
+export interface PlaceholderResult {
+  root: TransformNode;
+  /** Меши, которые участвуют в raycast (наведение игрока). */
+  meshes: AbstractMesh[];
+  /** Опционально: функция перерисовки REC-индикатора (мигание). */
+  redrawRec?: (visible: boolean) => void;
+}
   
   /** Бур: основание + колонна + головка. */
   export function createDrillPlaceholder(scene: Scene): PlaceholderResult {
@@ -93,168 +98,394 @@ import {
     return { root, meshes: [body, earL, earR] };
   }
   
-  /** Фотоаппарат world-модель (на столе). */
-  export function createCameraWorldPlaceholder(scene: Scene): PlaceholderResult {
-    const root = new TransformNode("cameraWorldRoot", scene);
-  
-    const bodyMat = new StandardMaterial("ph_camBody", scene);
-    bodyMat.diffuseColor = new Color3(0.15, 0.15, 0.18);
-    bodyMat.specularColor = new Color3(0.15, 0.15, 0.15);
-  
-    const lensMat = new StandardMaterial("ph_camLens", scene);
-    lensMat.diffuseColor = new Color3(0.08, 0.1, 0.14);
-    lensMat.emissiveColor = new Color3(0.02, 0.04, 0.06);
-  
-    const body = MeshBuilder.CreateBox("camBody", { width: 0.32, height: 0.2, depth: 0.18 }, scene);
-    body.position.set(0, 0.1, 0);
-    body.material = bodyMat;
-    body.parent = root;
-    body.isPickable = true;
-    body.checkCollisions = false;
-  
-    const lens = MeshBuilder.CreateCylinder("camLens", { height: 0.12, diameter: 0.1, tessellation: 12 }, scene);
-    lens.rotation.x = Math.PI / 2;
-    lens.position.set(0, 0.1, 0.14);
-    lens.material = lensMat;
-    lens.parent = root;
-    lens.isPickable = true;
-  
-    const trigger = MeshBuilder.CreateBox("camTrigger", { width: 0.6, height: 0.5, depth: 0.5 }, scene);
-    trigger.position.set(0, 0.15, 0);
-    trigger.visibility = 0;
-    trigger.isPickable = true;
-    trigger.checkCollisions = false;
-    trigger.parent = root;
-  
-    return { root, meshes: [body, lens, trigger] };
+// ═══════════════════════════════════════════════════════════════
+//  КАМЕРА — ОБЩИЕ ДАННЫЕ (из JSON пользователя)
+// ═══════════════════════════════════════════════════════════════
+//
+//  Модель сделана в редакторе в масштабе 10x. Чтобы получить
+//  реальный размер (0.22 × 0.16 × 0.06 м), применяем S = 0.1.
+
+const S = 0.1;
+
+interface CamPart {
+  type: "box" | "cylinder";
+  x: number; y: number; z: number;
+  rx?: number; ry?: number; rz?: number;
+  w: number; h: number; d: number;
+  material: "stone" | "darkStone" | "sand" | "metal" | "wood" | "water";
+  color?: string;
+  /** Роль "screen" — рисуем не меш, а маску-окно. */
+  role?: "screen";
+}
+
+const CAMERA_PARTS: CamPart[] = [
+  // ── Основной корпус ─────────────────────────────────────
+  { type: "box",      x:  0.00, y: 0.50, z:  0.00, w: 2.20, h: 1.60, d: 0.60, material: "metal" },
+  { type: "cylinder", x:  1.10, y: 0.50, z:  0.00, w: 0.60, h: 1.60, d: 0.60, material: "metal" },
+  { type: "cylinder", x: -1.10, y: 0.50, z:  0.00, w: 0.60, h: 1.60, d: 0.60, material: "metal" },
+  { type: "box",      x:  1.10, y: 0.50, z:  0.32, w: 0.60, h: 1.60, d: 0.60, material: "metal" },
+  { type: "cylinder", x:  1.10, y: 0.50, z:  0.62, w: 0.60, h: 1.60, d: 0.60, material: "metal" },
+
+  // ── Задняя часть корпуса ────────────────────────────────
+  { type: "box",      x:  0.00, y: 0.50, z: -0.28, w: 2.10, h: 1.40, d: 0.10, material: "wood" },
+
+  // ── Экран — рисуется как МАСКА-ОКНО, не как box ─────────
+  { type: "box",      x:  0.00, y: 0.50, z: -0.31, w: 1.86, h: 1.16, d: 0.10, material: "wood",
+    color: "#000000", role: "screen" },
+
+  // ── Объектив ────────────────────────────────────────────
+  { type: "cylinder", x: -0.24, y: 0.50, z: 0.57, rx: 1.5708, w: 1.12, h: 0.60, d: 1.12, material: "metal", color: "#424242" },
+  { type: "cylinder", x: -0.24, y: 0.50, z: 0.67, rx: 1.5708, w: 1.23, h: 0.36, d: 1.23, material: "metal" },
+  { type: "cylinder", x: -0.24, y: 0.50, z: 0.65, rx: 1.5708, w: 1.00, h: 0.60, d: 1.00, material: "metal", color: "#000000" },
+  { type: "cylinder", x: -0.04, y: 0.76, z: 0.66, rx: 1.5708, w: 0.20, h: 0.60, d: 1.00, material: "metal", color: "#ffffff" },
+
+  // ── Кнопка спуска ───────────────────────────────────────
+  { type: "cylinder", x:  1.10, y: 1.34, z: -0.02, w: 0.40, h: 0.20, d: 0.40, material: "metal", color: "#711414" },
+
+  // ── Призма / видоискатель ───────────────────────────────
+  { type: "box",      x: -0.24, y: 1.47, z:  0.10, w: 1.30, h: 0.50, d: 0.80, material: "metal" },
+  { type: "box",      x: -0.24, y: 1.48, z: -0.31, w: 1.00, h: 0.33, d: 0.10, material: "wood", color: "#000000" },
+];
+
+// ── Материалы для частей камеры ──────────────────────────────
+
+const FALLBACK_COLORS: Record<CamPart["material"], [number, number, number]> = {
+  stone:     [0.55, 0.46, 0.33],
+  darkStone: [0.28, 0.22, 0.16],
+  sand:      [0.85, 0.70, 0.45],
+  metal:     [0.50, 0.52, 0.55],
+  wood:      [0.32, 0.22, 0.12],
+  water:     [0.15, 0.40, 0.65],
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  КЕШ ТЕКСТУР, ПРИВЯЗАННЫЙ К СЦЕНЕ
+// ═══════════════════════════════════════════════════════════════
+//
+//  ВАЖНО: кеш глобальный — раньше текстуры жили между сценами,
+//  и при переходе фура → пирамида старые текстуры оставались в кеше,
+//  но были привязаны к УЖЕ УНИЧТОЖЕННОЙ сцене. Материал получал
+//  мёртвую текстуру → чёрный или невидимый меш.
+//
+//  Решение: WeakMap<Scene, Map<...>>. Каждая сцена имеет свой кеш,
+//  при уничтожении сцены он автоматически собирается GC.
+
+const CAM_TEX_CACHE = new WeakMap<Scene, Map<string, Texture | null>>();
+
+function getTexCache(scene: Scene): Map<string, Texture | null> {
+  let cache = CAM_TEX_CACHE.get(scene);
+  if (!cache) {
+    cache = new Map();
+    CAM_TEX_CACHE.set(scene, cache);
   }
-/** Фотоаппарат viewmodel: корпус, объектив, экран, сетка поверх экрана. */
-export function createCameraViewModelPlaceholder(
+  return cache;
+}
+
+function loadCamTexture(scene: Scene, matId: string): Texture | null {
+  const cache = getTexCache(scene);
+  if (cache.has(matId)) {
+    return cache.get(matId) ?? null;
+  }
+  const def = TEXTURES.find((t) => t.id === matId);
+  if (!def) {
+    cache.set(matId, null);
+    return null;
+  }
+  try {
+    const tex = new Texture(def.path, scene, false, true, Texture.TRILINEAR_SAMPLINGMODE);
+    tex.uScale = 1;
+    tex.vScale = 1;
+    cache.set(matId, tex);
+    return tex;
+  } catch {
+    cache.set(matId, null);
+    return null;
+  }
+}
+
+function makeCamPartMaterial(
   scene: Scene,
-  screenTexture: Texture | RenderTargetTexture
+  part: CamPart,
+  cache: Map<string, StandardMaterial>
+): StandardMaterial {
+  const key = `${part.material}|${part.color ?? ""}`;
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const mat = new StandardMaterial(`cam_mat_${cache.size}`, scene);
+
+  if (part.color) {
+    const c = Color3.FromHexString(part.color);
+    mat.diffuseColor = c;
+    mat.emissiveColor = new Color3(c.r * 0.05, c.g * 0.05, c.b * 0.05);
+  } else {
+    const tex = loadCamTexture(scene, part.material);
+    if (tex) {
+      mat.diffuseTexture = tex;
+      mat.diffuseColor = new Color3(1, 1, 1);
+      mat.emissiveColor = new Color3(0.08, 0.08, 0.08);
+    } else {
+      const [r, g, b] = FALLBACK_COLORS[part.material];
+      mat.diffuseColor = new Color3(r, g, b);
+    }
+  }
+
+  mat.specularColor = new Color3(0.15, 0.15, 0.15);
+  mat.maxSimultaneousLights = 8;
+  cache.set(key, mat);
+  return mat;
+}
+
+// ── Сборка модели из частей (все — Group 2) ──────────────────
+
+function buildCameraBody(
+  scene: Scene,
+  parent: TransformNode,
+  renderingGroup: number
+): AbstractMesh[] {
+  const out: AbstractMesh[] = [];
+  const matCache = new Map<string, StandardMaterial>();
+
+  for (const part of CAMERA_PARTS) {
+    // Экран — НЕ рисуем. Вместо него будет маска.
+    if (part.role === "screen") continue;
+
+    let mesh: Mesh;
+    if (part.type === "cylinder") {
+      mesh = MeshBuilder.CreateCylinder(`${part.material}_cyl`,
+        { height: part.h * S, diameter: part.w * S, tessellation: 24 }, scene);
+    } else {
+      mesh = MeshBuilder.CreateBox(`${part.material}_box`,
+        { width: part.w * S, height: part.h * S, depth: part.d * S }, scene);
+    }
+
+    mesh.position.set(part.x * S, part.y * S, part.z * S);
+    if (part.rx) mesh.rotation.x = part.rx;
+    if (part.ry) mesh.rotation.y = part.ry;
+    if (part.rz) mesh.rotation.z = part.rz;
+    mesh.material = makeCamPartMaterial(scene, part, matCache);
+    mesh.parent = parent;
+    mesh.isPickable = false;
+    mesh.renderingGroupId = renderingGroup;
+    out.push(mesh);
+  }
+
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  WORLD-МОДЕЛЬ (на столе)
+// ═══════════════════════════════════════════════════════════════
+
+export function createCameraWorldPlaceholder(scene: Scene): PlaceholderResult {
+  const root = new TransformNode("cameraWorldRoot", scene);
+
+  // В мире тоже рисуем «окно» — но вместо маски чёрная плоскость,
+  // чтобы на столе камера выглядела целой.
+  const meshes = buildCameraBody(scene, root, 0);
+
+  // Чёрный экран в world-версии (обычный box, не маска).
+  const screenMat = new StandardMaterial("cam_screen_world", scene);
+  screenMat.diffuseColor = new Color3(0.02, 0.02, 0.03);
+  screenMat.emissiveColor = new Color3(0.01, 0.01, 0.015);
+  screenMat.specularColor = new Color3(0, 0, 0);
+  screenMat.maxSimultaneousLights = 8;
+
+  const screenBox = MeshBuilder.CreateBox("camScreenWorld",
+    { width: 1.86 * S, height: 1.16 * S, depth: 0.02 }, scene);
+  screenBox.position.set(0 * S, 0.5 * S, -0.31 * S);
+  screenBox.material = screenMat;
+  screenBox.parent = root;
+  screenBox.isPickable = false;
+  meshes.push(screenBox);
+
+  // Триггер для interaction.
+  const trigger = MeshBuilder.CreateBox("camTrigger",
+    { width: 0.35, height: 0.25, depth: 0.3 }, scene);
+  trigger.position.set(0, 0.05, 0);
+  trigger.visibility = 0;
+  trigger.isPickable = true;
+  trigger.checkCollisions = false;
+  trigger.parent = root;
+  meshes.push(trigger);
+
+  return { root, meshes };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  VIEWMODEL (в руке) — с маской-окном
+// ═══════════════════════════════════════════════════════════════
+//
+//  Порядок рендера:
+//    Group 0 — мир + сетка видоискателя
+//    Group 1 — маска (пишет только depth, не цвет)
+//    Group 2 — корпус камеры (не рисуется в области маски)
+//
+//  В результате игрок видит мир сквозь окно в задней стенке корпуса,
+//  а сверху — сетку видоискателя.
+
+export function createCameraViewModelPlaceholder(
+  scene: Scene
 ): PlaceholderResult {
   const root = new TransformNode("cameraViewModelRoot", scene);
 
-  const bodyMat = new StandardMaterial("ph_vmBody", scene);
-  bodyMat.diffuseColor = new Color3(0.18, 0.18, 0.2);
-  bodyMat.specularColor = new Color3(0.2, 0.2, 0.2);
-  bodyMat.maxSimultaneousLights = 8;
+  // ── Корпус и объектив — Group 2 ─────────────────────────
+  const meshes = buildCameraBody(scene, root, 2);
 
-  const lensMat = new StandardMaterial("ph_vmLens", scene);
-  lensMat.diffuseColor = new Color3(0.1, 0.12, 0.16);
-  lensMat.emissiveColor = new Color3(0.03, 0.05, 0.08);
-  lensMat.maxSimultaneousLights = 8;
+  // ── Маска-окно — Group 1 ────────────────────────────────
+  // Плоскость с disableColorWrite: пишет depth, но не цвет.
+  // В её области корпус (Group 2) не рисуется — открывается
+  // окно в мир, который был отрендерен в Group 0.
+  //
+  // Z = -0.05 — перед задней стенкой корпуса (-0.03), с
+  // запасом 20 мм. Плоскость повёрнута нормалью к игроку
+  // (rotation.y = PI, т.к. по умолчанию нормаль смотрит в -Z).
+  const maskMat = new StandardMaterial("cam_mask", scene);
+  maskMat.disableColorWrite = true;
+  maskMat.disableDepthWrite = false;
+  // Без этого маска не рендерится, потому что после rotation.y = PI
+  // её лицевая сторона отвёрнута от игрока — а мы смотрим на изнанку.
+  maskMat.backFaceCulling = false;
+  maskMat.diffuseColor = new Color3(0, 0, 0);
+  maskMat.specularColor = new Color3(0, 0, 0);
+  maskMat.maxSimultaneousLights = 0;
 
-  // ── Корпус ─────────────────────────────────────────────
-  const body = MeshBuilder.CreateBox("vmBody",
-    { width: 0.14, height: 0.09, depth: 0.08 }, scene);
-  body.material = bodyMat;
-  body.parent = root;
-  body.isPickable = false;
+  const mask = MeshBuilder.CreatePlane("camMask",
+    { width: 1.86 * S, height: 1.16 * S }, scene);
+  mask.position.set(0, 0.5 * S, -0.05);
+  mask.rotation.y = Math.PI;
+  mask.material = maskMat;
+  mask.parent = root;
+  mask.isPickable = false;
+  mask.renderingGroupId = 1;
+  meshes.push(mask);
 
-  // ── Объектив ──────────────────────────────────────────
-  const lens = MeshBuilder.CreateCylinder("vmLens",
-    { height: 0.06, diameter: 0.05, tessellation: 10 }, scene);
-  lens.rotation.x = Math.PI / 2;
-  lens.position.set(0, 0, 0.06);
-  lens.material = lensMat;
-  lens.parent = root;
-  lens.isPickable = false;
+  // ── Сетка видоискателя — Group 0 ────────────────────────
+  // Рендерится вместе с миром, поверх него. Через маску
+  // (disableColorWrite) видна вместе с миром.
+  const GW = 512;
+  const GH = 340;
+  const dt = new DynamicTexture("ph_vmGrid", { width: GW, height: GH }, scene, true);
+  dt.hasAlpha = true;
 
-  // ── Экран через PBR unlit — надёжный способ показать RTT ─
-  // StandardMaterial с emissiveTexture капризничает: текстура
-  // может не привязаться или умножиться на чёрный emissiveColor.
-  // PBRMaterial.unlit = true показывает albedoTexture как есть.
-  // StandardMaterial работал с RTT — вернём его.
-  // PBR + unlit + separateCullingPass лагали, PBR убираем.
-  // StandardMaterial с emissiveTexture: RTT рендерится в неё
-  // один-в-один. Убеждаемся что текстура привязана явно.
-  const screenMat = new StandardMaterial("ph_vmScreen", scene);
-  screenMat.emissiveTexture = screenTexture;
-  screenMat.emissiveColor = new Color3(1, 1, 1);
-  screenMat.diffuseTexture = null;
-  screenMat.diffuseColor = new Color3(0, 0, 0);
-  screenMat.ambientColor = new Color3(0, 0, 0);
-  screenMat.specularColor = new Color3(0, 0, 0);
-  screenMat.disableLighting = true;
-  screenMat.backFaceCulling = false;
-  screenMat.maxSimultaneousLights = 8;
+  const g = dt.getContext() as unknown as CanvasRenderingContext2D;
+  g.clearRect(0, 0, GW, GH);
 
-  // RTT — это RenderTargetTexture. Она не «загружается» как файл,
-  // но для корректного отображения нужны правильные параметры
-  // выборки. Убеждаемся что нет мипмапов и фильтр линейный.
-  if (screenTexture instanceof RenderTargetTexture) {
-    screenTexture.wrapU = Texture.CLAMP_ADDRESSMODE;
-    screenTexture.wrapV = Texture.CLAMP_ADDRESSMODE;
+  // Сетка третей
+  g.strokeStyle = "rgba(255,255,255,0.35)";
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(GW / 3, 0); g.lineTo(GW / 3, GH);
+  g.moveTo(GW * 2 / 3, 0); g.lineTo(GW * 2 / 3, GH);
+  g.moveTo(0, GH / 3); g.lineTo(GW, GH / 3);
+  g.moveTo(0, GH * 2 / 3); g.lineTo(GW, GH * 2 / 3);
+  g.stroke();
+
+  // Перекрестие
+  g.strokeStyle = "rgba(255,255,255,0.9)";
+  g.lineWidth = 4;
+  g.beginPath();
+  g.moveTo(GW / 2 - 28, GH / 2); g.lineTo(GW / 2 - 10, GH / 2);
+  g.moveTo(GW / 2 + 10, GH / 2); g.lineTo(GW / 2 + 28, GH / 2);
+  g.moveTo(GW / 2, GH / 2 - 28); g.lineTo(GW / 2, GH / 2 - 10);
+  g.moveTo(GW / 2, GH / 2 + 10); g.lineTo(GW / 2, GH / 2 + 28);
+  g.stroke();
+
+  // Уголки
+  const CM = 18;
+  const CL = 44;
+  g.strokeStyle = "rgba(255,255,255,0.9)";
+  g.lineWidth = 5;
+  g.beginPath();
+  g.moveTo(CM, CM + CL); g.lineTo(CM, CM); g.lineTo(CM + CL, CM);
+  g.moveTo(GW - CM - CL, CM); g.lineTo(GW - CM, CM); g.lineTo(GW - CM, CM + CL);
+  g.moveTo(CM, GH - CM - CL); g.lineTo(CM, GH - CM); g.lineTo(CM + CL, GH - CM);
+  g.moveTo(GW - CM - CL, GH - CM); g.lineTo(GW - CM, GH - CM); g.lineTo(GW - CM, GH - CM - CL);
+  g.stroke();
+
+  // REC — координаты и текст
+  const recX = CM + CL + 26;
+  const recY = CM + 22;
+
+  g.font = "bold 20px Consolas, monospace";
+  g.fillStyle = "rgba(244,67,54,1)";
+  g.textAlign = "left";
+  g.fillText("REC", recX + 14, recY + 7);
+
+  g.fillStyle = "rgba(255,255,255,0.75)";
+  g.font = "18px Consolas, monospace";
+  g.textAlign = "right";
+  g.fillText("AUTO", GW - recX, recY + 7);
+
+  g.textAlign = "center";
+  g.fillStyle = "rgba(255,255,255,0.6)";
+  g.font = "16px Consolas, monospace";
+  g.fillText("+10", GW / 2, CM + 16);
+  g.fillText("-10", GW / 2, GH - CM - 6);
+  g.fillText("10",  CM + 16, GH / 2 + 6);
+  g.fillText("10",  GW - CM - 16, GH / 2 + 6);
+
+  g.textAlign = "left";
+  g.fillStyle = "rgba(255,255,255,0.75)";
+  g.fillText("f/2.8", CM + 40, GH - CM - 6);
+  g.textAlign = "right";
+  g.fillText("+0.0", GW - CM - 40, GH - CM - 6);
+
+  // Батарея
+  const batW = 100;
+  const batH = 14;
+  const batX = GW / 2 - batW / 2;
+  const batY = GH - 62;
+  g.strokeStyle = "rgba(255,255,255,0.7)";
+  g.lineWidth = 2;
+  g.textAlign = "left";
+  g.strokeRect(batX, batY, batW, batH);
+  g.fillStyle = "rgba(255,255,255,0.7)";
+  g.fillRect(batX + batW, batY + 4, 4, batH - 8);
+  const cellW = (batW - 8) / 4;
+  g.fillStyle = "rgba(76,175,80,0.95)";
+  for (let k = 0; k < 4; k++) {
+    g.fillRect(batX + 4 + k * cellW, batY + 4, cellW - 2, batH - 8);
   }
 
-  const screen = MeshBuilder.CreatePlane("vmScreen",
-    { width: 0.10, height: 0.065 }, scene);
-  screen.position.set(0, 0, -0.041);
-  screen.rotation.y = Math.PI;   // развёрнут назад к лицу
-  screen.material = screenMat;
-  screen.parent = root;
-  screen.isPickable = false;
-
-  // ── Сетка через SVG data URL ──────────────────────────
-  // encodeURIComponent вместо btoa — работает с любыми символами.
-  // Alpha сохраняется корректно.
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-<g stroke="rgba(232,201,138,0.45)" stroke-width="1" fill="none">
-<line x1="85.33" y1="0" x2="85.33" y2="256"/>
-<line x1="170.66" y1="0" x2="170.66" y2="256"/>
-<line x1="0" y1="85.33" x2="256" y2="85.33"/>
-<line x1="0" y1="170.66" x2="256" y2="170.66"/>
-</g>
-<circle cx="128" cy="128" r="42" fill="none" stroke="rgba(232,201,138,0.9)" stroke-width="2"/>
-<g stroke="rgba(232,201,138,0.9)" stroke-width="2">
-<line x1="110" y1="128" x2="122" y2="128"/>
-<line x1="134" y1="128" x2="146" y2="128"/>
-<line x1="128" y1="110" x2="128" y2="122"/>
-<line x1="128" y1="134" x2="128" y2="146"/>
-</g>
-<g stroke="rgba(232,201,138,0.95)" stroke-width="3" fill="none">
-<polyline points="14,36 14,14 36,14"/>
-<polyline points="220,14 242,14 242,36"/>
-<polyline points="14,220 14,242 36,242"/>
-<polyline points="220,242 242,242 242,220"/>
-</g>
-<circle cx="22" cy="22" r="5" fill="rgba(244,67,54,1)"/>
-</svg>`;
-
-  const gridUrl =
-    "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-
-  const grid = new Texture(
-    gridUrl,
-    scene,
-    true,                          // noMipmap
-    false,                         // invertY
-    Texture.TRILINEAR_SAMPLINGMODE
-  );
-  grid.hasAlpha = true;
+  dt.update();
 
   const gridMat = new StandardMaterial("ph_vmGridMat", scene);
-  gridMat.emissiveTexture = grid;
+  gridMat.emissiveTexture = dt;
   gridMat.emissiveColor = new Color3(1, 1, 1);
-  gridMat.diffuseColor = new Color3(0, 0, 0);
+  gridMat.diffuseTexture = dt;
+  gridMat.diffuseColor = new Color3(1, 1, 1);
   gridMat.specularColor = new Color3(0, 0, 0);
-  gridMat.diffuseTexture = grid;
-  gridMat.opacityTexture = grid;
   gridMat.useAlphaFromDiffuseTexture = true;
   gridMat.disableLighting = true;
   gridMat.backFaceCulling = false;
-  gridMat.maxSimultaneousLights = 8;
+  gridMat.disableDepthWrite = true;
+  gridMat.maxSimultaneousLights = 0;
 
   const gridPlane = MeshBuilder.CreatePlane("vmGrid",
-    { width: 0.10, height: 0.065 }, scene);
-  gridPlane.position.set(0, 0, -0.0435);
-  gridPlane.rotation.y = Math.PI;
+    { width: 1.86 * S, height: 1.16 * S }, scene);
+  gridPlane.position.set(0, 0.5 * S, -0.052);
   gridPlane.material = gridMat;
   gridPlane.parent = root;
   gridPlane.isPickable = false;
+  gridPlane.renderingGroupId = 0;
+  meshes.push(gridPlane);
 
-  return { root, meshes: [body, lens, screen, gridPlane] };
+  // ── REC — мигание ───────────────────────────────────────
+  const redrawRec = (visible: boolean): void => {
+    const ctx = dt.getContext() as unknown as CanvasRenderingContext2D;
+    ctx.clearRect(recX - 10, recY - 10, 20, 20);
+    if (visible) {
+      ctx.fillStyle = "rgba(244,67,54,1)";
+      ctx.beginPath();
+      ctx.arc(recX, recY, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    dt.update();
+  };
+  redrawRec(true);
+
+  return { root, meshes, redrawRec };
 }
   
   /** Простой камень на песке (для дорожки). */

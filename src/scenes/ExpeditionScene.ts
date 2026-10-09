@@ -68,7 +68,6 @@ export class ExpeditionScene {
   private drillCompleted = false;
   private finished = false;
   private hasCamera = false;
-  private shotActive = false;
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (this.finished) return;
@@ -88,8 +87,19 @@ export class ExpeditionScene {
   };
 
   private readonly onPointerDown = (e: PointerEvent): void => {
-    if (this.finished || e.button !== 0) return;
-    this.tryPhoto();
+    if (this.finished) return;
+    if (!this.hasCamera) return;
+    // ЛКМ — зажать: поднимаем viewmodel к лицу.
+    // Первый клик после потери pointer lock игнорируем — он
+    // идёт на захват мыши, не на зум.
+    if (e.button === 0 && this.engine.isPointerLock) {
+      this.cameraItem?.startRaise();
+    }
+  };
+
+  private readonly onPointerUp = (e: PointerEvent): void => {
+    if (e.button !== 0) return;
+    this.cameraItem?.startLower();
   };
 
   constructor(options: ExpeditionSceneOptions) {
@@ -221,6 +231,7 @@ export class ExpeditionScene {
 };
     window.addEventListener("keydown", this.onKeyDown);
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
+    window.addEventListener("pointerup", this.onPointerUp);
   }
 
   setEnabled(value: boolean): void {
@@ -248,6 +259,7 @@ export class ExpeditionScene {
   dispose(): void {
     window.removeEventListener("keydown", this.onKeyDown);
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
+    window.removeEventListener("pointerup", this.onPointerUp);
     for (const anomaly of this.anomalies) anomaly.dispose();
     this.anomalies = [];
     this.cameraItem?.dispose();
@@ -345,7 +357,6 @@ export class ExpeditionScene {
 
   private tryPhoto(): void {
     if (this.finished) return;
-    if (this.shotActive) return;
     if (!this.hasCamera) {
       this.hud.showToast("Нет фотоаппарата!");
       return;
@@ -355,31 +366,24 @@ export class ExpeditionScene {
       return;
     }
     if (this.shotCooldown > 0) return;
+    this.shotCooldown = 0.35;
 
-    this.shotActive = true;
-    // ── Движение НЕ блокируем — можно бегать с фотиком у лица ──
-    this.cameraItem?.startShot({
-      onAimReached: () => {
-        this.photos -= 1;
-        this.hud.setPhotos(this.photos);
-        this.hud.flashScreen();
-        this.cameraItem?.shootKick();
-        this.playShotSound();
+    // Мгновенный снимок — никакой анимации подъёма/опускания.
+    // Видоискатель уже поднят, если игрок зажал ЛКМ.
+    this.photos -= 1;
+    this.hud.setPhotos(this.photos);
+    this.hud.flashScreen();
+    this.cameraItem?.shoot();
+    this.playShotSound();
 
-        const target = this.findAnomalyInSight();
-        if (target) {
-          target.dispose();
-          this.anomalies = this.anomalies.filter((a) => a !== target);
-          this.hud.showToast("Аномалия запечатлена!");
-        } else {
-          this.hud.showToast("Промах…");
-        }
-      },
-      onReturned: () => {
-        this.shotActive = false;
-        this.shotCooldown = 0.3;
-      },
-    });
+    const target = this.findAnomalyInSight();
+    if (target) {
+      target.dispose();
+      this.anomalies = this.anomalies.filter((a) => a !== target);
+      this.hud.showToast("Аномалия запечатлена!");
+    } else {
+      this.hud.showToast("Промах…");
+    }
   }
 
   private playShotSound(): void {

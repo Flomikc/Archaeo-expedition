@@ -128,19 +128,18 @@ import {
   
     // ---------------------------------------------------------------- public
   
-    /** Полностью отключает/включает управление (для пауз/меню). */
-    setEnabled(value: boolean): void {
-      if (this.enabled === value) return;
-      this.enabled = value;
-  
-      if (!value) {
-        this.keys.clear();
-        this.verticalVelocity = 0;
-        this.camera.detachControl();
-      } else {
-        this.camera.attachControl(this.canvas, true);
-      }
+  setEnabled(value: boolean): void {
+    if (this.enabled === value) return;
+    this.enabled = value;
+
+    if (!value) {
+      this.keys.clear();
+      this.verticalVelocity = 0;
+      this.camera.detachControl();
+    } else {
+      this.camera.attachControl(this.canvas, true);
     }
+  }
   
   /** Создаёт фонарик, привязанный к камере. */
   enableFlashlight(): SpotLight {
