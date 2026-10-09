@@ -407,6 +407,7 @@ export function buildTorch(
   else if (side === "w") { dx = -ctx.sizeX / 2 + inset; dz = t * (ctx.sizeZ / 2 - 1); }
   else { dx = ctx.sizeX / 2 - inset; dz = t * (ctx.sizeZ / 2 - 1); }
 
+  // Палка
   const stick = MeshBuilder.CreateCylinder("torchStick",
     { height: 0.5, diameter: 0.1, tessellation: 6 }, ctx.scene);
   stick.position.set(ctx.centerX + dx, ctx.floorY + 2.5, ctx.centerZ + dz);
@@ -415,6 +416,7 @@ export function buildTorch(
   stick.material = mat;
   out.push(stick);
 
+  // Пламя — emissive, светится сам, но НЕ создаёт PointLight.
   const flame = MeshBuilder.CreateSphere("torchFlame", { diameter: 0.25 }, ctx.scene);
   flame.position.set(ctx.centerX + dx, ctx.floorY + 2.85, ctx.centerZ + dz);
   const flameMat = new StandardMaterial("torchFlameMat", ctx.scene);
@@ -423,13 +425,6 @@ export function buildTorch(
   flame.material = flameMat;
   out.push(flame);
 
-  const light = new PointLight("torchLight",
-    new Vector3(ctx.centerX + dx, ctx.floorY + 2.9, ctx.centerZ + dz),
-    ctx.scene);
-  light.diffuse = new Color3(1, 0.55, 0.2);
-  light.intensity = 0.7;
-  light.range = 10;
-  flame.metadata = { light };
-
+  // PointLight УБРАН — он вешал шейдер и мешал фонарику.
   return out;
 }

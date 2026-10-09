@@ -29,11 +29,17 @@ export class Atmosphere {
         this.spawnDust(new Vector3(0, 4, 20), 60, 8);
         break;
       case "pyramid":
-        this.scene.clearColor = new Color4(0.02, 0.02, 0.025, 1);
-        this.scene.fogMode = Scene.FOGMODE_NONE;
-        this.setupPipeline(0.55, 0.75, 0.12);
-        this.spawnDust(new Vector3(20, 3, 20), 100, 14);
-        break;
+          this.scene.clearColor = new Color4(0.02, 0.02, 0.025, 1);
+          this.scene.fogMode = Scene.FOGMODE_EXP2;
+          // Было 0.05 — слишком плотно. Теперь 0.02:
+          // дальние комнаты слегка размываются, но фонарик и факелы
+          // работают в радиусе 15–35 м.
+          this.scene.fogDensity = 0.02;
+          this.scene.fogColor = new Color3(0.04, 0.035, 0.03);
+          // Vignette уменьшили с 0.75 до 0.55 — иначе экран сильно затемнялся.
+          this.setupPipeline(0.55, 0.55, 0.12);
+          this.spawnDust(new Vector3(20, 3, 20), 100, 14);
+          break;
       case "hub":
         this.scene.clearColor = new Color4(0.02, 0.02, 0.025, 1);
         this.scene.fogMode = Scene.FOGMODE_NONE;

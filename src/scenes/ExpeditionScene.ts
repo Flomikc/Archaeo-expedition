@@ -102,9 +102,7 @@ export class ExpeditionScene {
     this.scene.collisionsEnabled = true;
 
     this.atmosphere = new Atmosphere(this.scene);
-    // ВРЕМЕННО: пирамида без тумана, без пост-обработки.
-    this.atmosphere.apply("hub");   // ← используем лёгкий пресет как в фуре
-    this.scene.fogMode = Scene.FOGMODE_NONE;
+    this.atmosphere.apply("pyramid");
 
     const ambient = new HemisphericLight("expAmbient", new Vector3(0, 1, 0), this.scene);
     ambient.intensity = 0.45;                        // как в фуре
@@ -117,9 +115,9 @@ export class ExpeditionScene {
     this.medkits = bonuses.medkitCount;
 
     // ── Генерация уровня ────────────────────────────────────
-    const save = SaveSystem.get();
-    const seed = save.levelSeed ?? (Date.now() & 0xffffffff);
-    SaveSystem.setLevelSeed(seed);
+    // Каждый вход в пирамиду — новый seed. Не сохраняем в SaveSystem,
+    // чтобы уровень не повторялся при следующем заходе.
+    const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
     this.level = new GridLevelGenerator().build(this.scene, {
       size: "small",
       seed,
@@ -172,24 +170,6 @@ export class ExpeditionScene {
       new Vector3(startRoom.centerX, startRoom.floorY, startRoom.centerZ)
     );
     this.exitMarker.setEnabled(false);
-
-    // ── DEBUG: убираем все лишние источники света ────────────
-    // Оставляем только ambient + фонарик.
-    // Удаляем: drillMoon, drillFill (создаются в drill blueprint'е),
-    // torch* (создаются в placeTorches), torchLight (в room-kit).
-    // После проверки фонарика — верни как было.
-    this.placeTorches();   // вызов оставим, но placeTorches() сам себя отключит
-
-    // Удаляем все источники, кроме ambient и фонарика
-    for (const light of [...this.scene.lights]) {
-      if (light.name === "expAmbient") continue;
-      if (light.name === "flashlight") continue;
-      light.dispose();
-    }
-    console.log(
-      "[DEBUG] Осталось источников:",
-      this.scene.lights.map((l) => l.name)
-    );
 
     // ── Интеракции ──────────────────────────────────────────
     this.interaction = new InteractionSystem(this.scene, this.player.camera);
@@ -394,28 +374,33 @@ export class ExpeditionScene {
   }
 
   private placeTorches(): void {
-    // ── DEBUG: факелы отключены, чтобы проверить фонарик ──
-    return;
     //const mat = new StandardMaterial("torchMat", this.scene);
     //mat.diffuseColor = new Color3(0.3, 0.15, 0.05);
     //mat.emissiveColor = new Color3(0.6, 0.3, 0.05);
+    // Важно: тот же лимит, что и у остальных материалов.
+    //mat.maxSimultaneousLights = 8;
 
     //const rooms = this.level.rooms;
     //for (let idx = 2; idx < rooms.length - 1; idx += 3) {
       //const room = rooms[idx];
       //const pos = new Vector3(room.centerX, room.floorY + 2.7, room.centerZ);
 
-      //const light = new PointLight(`torch${idx}`, pos, this.scene);
+      //const light = new PointLight(`torch_${idx}`, pos, this.scene);
       //light.diffuse = new Color3(1, 0.55, 0.2);
       //light.intensity = 0.85;
       //light.range = 12;
       //this.torches.push(light);
 
-      //const flame = MeshBuilder.CreateSphere(`flame${idx}`, { diameter: 0.28 }, this.scene);
+      //const flame = MeshBuilder.CreateSphere(
+        //`flame_${idx}`,
+        //{ diameter: 0.28 },
+        //this.scene
+      //);
       //flame.position.copyFrom(pos);
       //flame.material = mat;
       //flame.isPickable = false;
     //}
+    return
   }
 
   private createExitMarker(position: Vector3): Mesh {
