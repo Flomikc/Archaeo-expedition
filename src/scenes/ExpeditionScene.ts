@@ -116,9 +116,9 @@ export class ExpeditionScene {
     this.atmosphere.apply("pyramid");
 
     const ambient = new HemisphericLight("expAmbient", new Vector3(0, 1, 0), this.scene);
-    ambient.intensity = 0.45;                        // как в фуре
-    ambient.diffuse = new Color3(0.9, 0.85, 0.8);    // как в фуре
-    ambient.groundColor = new Color3(0.18, 0.18, 0.22);
+    ambient.intensity = 0.12;                        // темно — без фонарика не пройти
+    ambient.diffuse = new Color3(0.5, 0.45, 0.4);    // тёплый оттенок
+    ambient.groundColor = new Color3(0.05, 0.05, 0.08);
 
     const bonuses = ShopSystem.getRuntimeBonuses();
     this.hasCamera = SaveSystem.get().hasCamera;
@@ -148,13 +148,12 @@ export class ExpeditionScene {
     this.player.enableFlashlight();
     this.hud.showToast("L — фонарик", 3000);
 
-    // Лампа на игроке — как hubLamp в фуре.
-    // Даёт постоянный свет вокруг игрока, чтобы стены всегда были видны.
+    // Слабая лампа вокруг игрока — чтобы видеть стены вплотную,
+    // но не освещать коридор. Основной свет — фонарик.
     const playerLamp = new PointLight("expPlayerLamp", new Vector3(0, 2.7, 0), this.scene);
-    playerLamp.intensity = 0.7;
-    playerLamp.diffuse = new Color3(1, 0.95, 0.85);
-    playerLamp.range = 14;
-    // Привязываем к камере игрока, чтобы летела за ним
+    playerLamp.intensity = 0.25;
+    playerLamp.diffuse = new Color3(0.9, 0.85, 0.75);
+    playerLamp.range = 6;
     playerLamp.parent = this.player.camera;
     playerLamp.position.set(0, 0.8, 0);
 
